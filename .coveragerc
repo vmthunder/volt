@@ -1,0 +1,7 @@
+[run]
+branch = True
+source = voltracker
+omit = voltracker/tests/*,voltracker/openstack/*
+
+[report]
+ignore-errors = True
