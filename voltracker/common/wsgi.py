@@ -203,29 +203,19 @@ class Server(object):
         self.children = []
         self.running = True
 
-    def start(self, application, default_port):
+    def start(self, name, default_port):
         """
         Run a WSGI server with the given application.
 
         :param application: The application to be run in the WSGI server
         :param default_port: Port to bind to if none is specified in conf
         """
+
+        self.loader = Loader()
+        application = self.loader.load_app(name)
+
         pgid = os.getpid()
-        try:
-            # NOTE(flaper87): Make sure this process
-            # runs in its own process group.
-            os.setpgid(pgid, pgid)
-        except OSError:
-            # NOTE(flaper87): When running glance-control,
-            # (glance's functional tests, for example)
-            # setpgid fails with EPERM as glance-control
-            # creates a fresh session, of which the newly
-            # launched service becomes the leader (session
-            # leaders may not change process groups)
-            #
-            # Running glance-(api|registry) is safe and
-            # shouldn't raise any error here.
-            pgid = 0
+        os.setpgid(pgid, pgid)
 
         def kill_children(*args):
             """Kills the entire process group."""
@@ -245,7 +235,7 @@ class Server(object):
         self.sock = get_socket(default_port)
 
         os.umask(0o27)  # ensure files are created with the correct privileges
-        self.logger = logging.getLogger('glance.wsgi.server')
+        self.logger = logging.getLogger('voltracker.wsgi.server')
 
         if CONF.workers == 0:
             # Useful for profiling, test, debug etc.
@@ -319,9 +309,6 @@ class Server(object):
 
     def run_server(self):
         """Run a WSGI server."""
-        if cfg.CONF.pydev_worker_debug_host:
-            utils.setup_remote_pydev_debug(cfg.CONF.pydev_worker_debug_host,
-                                           cfg.CONF.pydev_worker_debug_port)
 
         eventlet.wsgi.HttpProtocol.default_request_version = "HTTP/1.0"
         try:
