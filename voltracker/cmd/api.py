@@ -36,12 +36,12 @@ from voltracker.openstack.common import log as logging
 
 CONF = cfg.CONF
 
-
 def main():
     CONF(sys.argv[1:], project='voltracker',
          version=version.version_string())
     logging.setup('voltracker')
 
-    server = wsgi.Server()
-    server.start('osapi_voltracker', CONF.bind_port)
+    # Use the wsgi service to serve the request from client
+    server = wsgi.Server('voltracker-api')
+    server.start(CONF.bind_port)
     server.wait()
