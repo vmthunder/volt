@@ -1,6 +1,7 @@
 # Copyright 2010 United States Government as represented by the
 # Administrator of the National Aeronautics and Space Administration.
 # Copyright 2010 OpenStack Foundation
+# Copyright 2014 IBM Corp.
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -29,7 +30,8 @@ import sys
 import time
 
 import eventlet
-from eventlet.green import socket, ssl
+from eventlet.green import socket
+from eventlet.green import ssl
 import eventlet.greenio
 import eventlet.wsgi
 from oslo.config import cfg
@@ -41,23 +43,10 @@ from paste import deploy
 
 from voltracker.common import exception
 from voltracker.common import utils
+from voltracker.openstack.common import gettextutils
 from voltracker.openstack.common import jsonutils
 from voltracker.openstack.common import log as logging
 
-LOG = logging.getLogger(__name__)
-
-wsgi_opts = [
-    cfg.StrOpt('api_paste_config',
-               default="api-paste.ini",
-               help='File name for the paste.deploy config for nova-api'),
-    cfg.StrOpt('wsgi_log_format',
-            default='%(client_ip)s "%(request_line)s" status: %(status_code)s'
-                    ' len: %(body_length)s time: %(wall_seconds).7f',
-            help='A python format string that is used as the template to '
-                 'generate log lines. The following values can be formatted '
-                 'into it: client_ip, date_time, request_line, status_code, '
-                 'body_length, wall_seconds.'),
-]
 
 bind_opts = [
     cfg.StrOpt('bind_host', default='0.0.0.0',
@@ -67,7 +56,10 @@ bind_opts = [
                help=_('The port on which the server will listen.')),
 ]
 
-socket_opts = [
+wsgi_opts = [
+    cfg.StrOpt('api_paste_config',
+               default="api-paste.ini",
+               help='File name for the paste.deploy config for nova-api'),
     cfg.IntOpt('backlog', default=4096,
                help=_('The backlog value that will be used when creating the '
                       'TCP listener socket.')),
@@ -101,10 +93,11 @@ eventlet_opts = [
 
 
 CONF = cfg.CONF
-CONF.register_opts(wsgi_opts)
 CONF.register_opts(bind_opts)
-CONF.register_opts(socket_opts)
+CONF.register_opts(wsgi_opts)
 CONF.register_opts(eventlet_opts)
+
+LOG = logging.getLogger(__name__)
 
 
 def get_bind_addr(default_port=None):
@@ -197,23 +190,20 @@ def get_socket(default_port):
 class Server(object):
     """Server class to manage multiple WSGI sockets and applications."""
 
-    def __init__(self, threads=1000):
+    def __init__(self, name, loader=None, threads=1000):
         eventlet.wsgi.MAX_HEADER_LINE = CONF.max_header_line
         self.threads = threads
+        self.loader = loader or Loader()
+        self.application = self.loader.load_app(name)
         self.children = []
         self.running = True
 
-    def start(self, name, default_port):
+    def start(self, default_port):
         """
         Run a WSGI server with the given application.
 
-        :param application: The application to be run in the WSGI server
         :param default_port: Port to bind to if none is specified in conf
         """
-
-        self.loader = Loader()
-        application = self.loader.load_app(name)
-
         pgid = os.getpid()
         os.setpgid(pgid, pgid)
 
@@ -231,7 +221,6 @@ class Server(object):
             signal.signal(signal.SIGHUP, signal.SIG_IGN)
             self.running = False
 
-        self.application = application
         self.sock = get_socket(default_port)
 
         os.umask(0o27)  # ensure files are created with the correct privileges
@@ -494,7 +483,7 @@ class Router(object):
 
 
 class Request(webob.Request):
-    """Add some Openstack API-specific logic to the base webob.Request."""
+    """Add some OpenStack API-specific logic to the base webob.Request."""
 
     def best_match_content_type(self):
         """Determine the requested response content-type."""
@@ -513,6 +502,17 @@ class Request(webob.Request):
             raise exception.InvalidContentType(content_type=content_type)
         else:
             return content_type
+
+    def best_match_language(self):
+        """Determines best available locale from the Accept-Language header.
+
+        :returns: the best language match or None if the 'Accept-Language'
+                  header was not available in the request.
+        """
+        if not self.accept_language:
+            return None
+        langs = gettextutils.get_available_languages('voltracker')
+        return self.accept_language.best_match(langs)
 
 
 class JSONRequestDeserializer(object):
@@ -565,6 +565,23 @@ class JSONResponseSerializer(object):
         response.body = self.to_json(result)
 
 
+def translate_exception(req, e):
+    """Translates all translatable elements of the given exception."""
+
+    # The RequestClass attribute in the webob.dec.wsgify decorator
+    # does not guarantee that the request object will be a particular
+    # type; this check is therefore necessary.
+    if not hasattr(req, "best_match_language"):
+        return e
+
+    locale = req.best_match_language()
+
+    if isinstance(e, webob.exc.HTTPError):
+        e.explanation = gettextutils.translate(e.explanation, locale)
+        e.detail = gettextutils.translate(e.detail, locale)
+    return e
+
+
 class Resource(object):
     """
     WSGI app that handles (de)serialization and controller dispatch.
@@ -601,17 +618,22 @@ class Resource(object):
         action_args = self.get_action_args(request.environ)
         action = action_args.pop('action', None)
 
-        deserialized_request = self.dispatch(self.deserializer,
-                                             action, request)
-        action_args.update(deserialized_request)
+        try:
+            deserialized_request = self.dispatch(self.deserializer,
+                                                 action, request)
+            action_args.update(deserialized_request)
+            action_result = self.dispatch(self.controller, action,
+                                          request, **action_args)
+        except webob.exc.WSGIHTTPException as e:
+            exc_info = sys.exc_info()
+            raise translate_exception(request, e), None, exc_info[2]
 
-        action_result = self.dispatch(self.controller, action,
-                                      request, **action_args)
         try:
             response = webob.Response(request=request)
             self.dispatch(self.serializer, action, response, action_result)
             return response
-
+        except webob.exc.WSGIHTTPException as e:
+            return translate_exception(request, e)
         except webob.exc.HTTPException as e:
             return e
         # return unserializable result (typically a webob exc)
@@ -680,4 +702,3 @@ class Loader(object):
         except LookupError as err:
             LOG.error(err)
             raise exception.PasteAppNotFound(name=name, path=self.config_path)
-
