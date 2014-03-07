@@ -13,3 +13,5 @@ WebOb>=1.2.3
 
 # For paste.util.template used in keystone.common.template
 Paste
+
+python-keystoneclient>=0.5.0
