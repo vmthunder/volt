@@ -23,6 +23,8 @@ from voltracker.common import policy
 from voltracker.common import exception
 from voltracker import executor
 
+SUPPORTED_PARAMS = ('host', 'port', 'iqn', 'lun')
+
 
 class Controller(object):
     """
@@ -34,13 +36,13 @@ class Controller(object):
         GET /volumes -- Returns a set of brief metadata about volumes
         HEAD /volumes/<ID> -- Returns detailed metadata about volumes
                             with id <ID>
-        GET /volumes/query -- Query and search volumes metadata about
-                              volumes matching specific conditions.
-                              Because the client uses this result to
-                              build the iscsi connections, in order to
-                              promote overall r/w performance and limit
-                              the number of connections, executor always
-                              returns partial matching list.
+        GET /volumes/qurey/<ID> -- Search volumes metadata about volumes
+                             matching the id <ID>. Because the client
+                             uses this result to build the iscsi
+                             connections, in order to promote overall
+                             r/w performance and limit the number of
+                             connections, executor always returns
+                             partial matching list.
         POST /volumes/<ID> -- Register a new volume and store metadata
                              with id <ID>
         DELETE /volumes/<ID> -- Delete all tracked volume with id <ID>

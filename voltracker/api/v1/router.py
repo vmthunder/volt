@@ -33,7 +33,7 @@ class API(wsgi.Router):
                        controller=volumes_resource,
                        action='index',
                        conditions={'method': ['HEAD']})
-        mapper.connect("/volumes/query",
+        mapper.connect("/volumes/query/{volume_id}",
                        controller=volumes_resource,
                        action='query',
                        conditions={'method': ['GET']})
