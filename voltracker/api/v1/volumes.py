@@ -17,13 +17,18 @@
 
 from webob.exc import HTTPBadRequest
 from webob.exc import HTTPForbidden
+from webob.exc import HTTPConflict
 import eventlet
 
 from voltracker.common import policy
 from voltracker.common import exception
 from voltracker import executor
+from voltracker.common import wsgi
+from voltracker.openstack.common import log as logging
 
 SUPPORTED_PARAMS = ('host', 'port', 'iqn', 'lun')
+
+LOG = logging.getLogger(__name__)
 
 
 class Controller(object):
@@ -98,3 +103,65 @@ class Controller(object):
             raise HTTPBadRequest(explanation="%s" % e)
 
         return dict(volumes=volumes)
+
+    def query(self, req):
+        pass
+
+    def remove(self, req):
+        pass
+
+    def register(self, req, volume_meta):
+        """
+        Adds the volume metadata to the registry and assigns
+        an volume identifier if one is not supplied in the request
+        headers.
+
+        :param req: The WSGI/Webob Request object
+        :param volume_meta: The volume metadata
+
+        :raises HTTPConflict if volume already exists
+        :raises HTTPBadRequest if volume metadata is not valid
+        :raises HTTPForbidden if volume metadata not allowed
+                to register
+        """
+        store = volume_meta.get('store')
+        volume_meta['status'] = 'creating'
+
+
+        try:
+            volume_meta = self.executor.add_image_metadata(req.context,
+                                                           volume_meta)
+        except exception.Duplicate:
+            msg = (_("An image with identifier %s already exists") %
+                   volume_meta['id'])
+            LOG.debug(msg)
+            raise HTTPConflict(explanation=msg,
+                               request=req,
+                               content_type="text/plain")
+        except exception.Invalid as e:
+            msg = _("Failed to register image. Got error: %(e)s") % {'e': e}
+            for line in msg.split('\n'):
+                LOG.debug(line)
+            raise HTTPBadRequest(explanation=msg,
+                                 request=req,
+                                 content_type="text/plain")
+        except exception.Forbidden:
+            msg = _("Forbidden to register volume.")
+            LOG.debug(msg)
+            raise HTTPForbidden(explanation=msg,
+                                request=req,
+                                content_type="text/plain")
+
+        self._enforce(req, 'register_volume')
+
+        id = volume_meta['id']
+
+        volume_meta = self._handle_source(req, id, volume_meta, volume_meta)
+
+        return {'volume_meta': volume_meta}
+
+
+def create_resource():
+    """Volumes resource factory method"""
+    return wsgi.Resource(Controller())
+

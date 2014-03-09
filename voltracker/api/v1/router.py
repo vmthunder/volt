@@ -43,11 +43,11 @@ class API(wsgi.Router):
                        conditions={'method': ['POST']})
         mapper.connect("/volumes/{volume_id}",
                        controller=volumes_resource,
-                       action='delete',
+                       action='remove',
                        conditions={'method': ['DELETE']})
         mapper.connect("/volumes",
                        controller=volumes_resource,
-                       action="delete",
+                       action="remove",
                        conditions={'method': ['DELETE']})
 
         super(API, self).__init__(mapper)
