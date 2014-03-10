@@ -98,8 +98,9 @@ class Controller(object):
             ]}
         """
         self._enforce(req, 'get_volumes')
+
         try:
-            volumes = self.executor.get_volumes_list(req.context)
+            volumes = self.executor.get_volumes_list()
         except exception.Invalid as e:
             raise HTTPBadRequest(explanation="%s" % e)
 
@@ -113,15 +114,13 @@ class Controller(object):
         :param peer_id: The opaque volume identifier allocated by
                         voltracker.
 
-        :raises HttpBadRequest if volume registry is invalid
         :raises HttpNotFound if volume is not available
-        :raises HttpUnauthorized if volume is not deleteable by the
-        requesting user
         """
         self._enforce(req, 'remove_volume')
 
+        params = self._get_query_params(req)
         try:
-            self.executor.delete_volume_metadata(req.context, peer_id)
+            self.executor.delete_volume_metadata(peer_id, params)
         except exception.NotFound as e:
             msg = _("Failed to find volume to delete: %(e)s") % {'e': e}
             for line in msg.split('\n'):
@@ -129,17 +128,10 @@ class Controller(object):
             raise HTTPNotFound(explanation=msg,
                                request=req,
                                content_type="text/plain")
-        except exception.Forbidden as e:
-            msg = _("Forbidden to delete volume: %(e)s") % {'e': e}
-            for line in msg.split('\n'):
-                LOG.info(line)
-            raise HTTPForbidden(explanation=msg,
-                                request=req,
-                                content_type="text/plain")
         else:
             return Response(body='', status=200)
 
-    def register(self, req, volume_meta):
+    def register(self, req, volume_id):
         """
         Adds the volume metadata to the registry and assigns
         an volume identifier if one is not supplied in the request
@@ -150,13 +142,13 @@ class Controller(object):
 
         :raises HTTPConflict if volume already exists
         :raises HTTPBadRequest if volume metadata is not valid
-        :raises HTTPForbidden if volume metadata not allowed
-                to register
         """
         self._enforce(req, 'register_volume')
+
+        params = self._get_query_params(req)
         try:
-            volume_meta = self.executor.add_volume_metadata(req.context,
-                                                            volume_meta)
+            volume_meta = self.executor.add_volume_metadata(volume_id,
+                                                            params)
         except exception.Duplicate:
             msg = (_("An volume with identifier %s already exists") %
                    volume_meta['id'])
@@ -171,14 +163,6 @@ class Controller(object):
             raise HTTPBadRequest(explanation=msg,
                                  request=req,
                                  content_type="text/plain")
-        except exception.Forbidden:
-            msg = _("Forbidden to register volume.")
-            LOG.debug(msg)
-            raise HTTPForbidden(explanation=msg,
-                                request=req,
-                                content_type="text/plain")
-
-        id = volume_meta['id']
 
         return {'volume_meta': volume_meta}
 
@@ -197,12 +181,11 @@ class Controller(object):
                  'iqn': <IQN>,
                  'lun': <LUN>}, ...
             ]}
+
         """
         self._enforce(req, 'get_volumes')
-        try:
-            volumes = self.executor.get_volumes_detail(req.context, volume_id)
-        except exception.Invalid as e:
-            raise HTTPBadRequest(explanation="%s" % e)
+
+        volumes = self.executor.get_volumes_detail(volume_id)
         return dict(volumes=volumes)
 
 

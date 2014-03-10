@@ -14,3 +14,45 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+
+
+from oslo.config import cfg
+from stevedore import named
+
+executor_opts = [
+    cfg.StrOpt('default_executor', default='btree',
+               help=_('The default volume tracker'
+                      ' algorithm executor.')),
+]
+
+CONF = cfg.CONF
+CONF.register_opts(executor_opts)
+
+
+def get_default_executor():
+    executor = named.NamedExtensionManager(
+        namespace='voltracker.executor',
+        names=CONF.default_exectuor,
+        invoke_on_load=True,
+        invoke_args=[CONF]
+    )
+    return executor
+
+
+class Executor(object):
+    """ The Base class of Executor
+    """
+    def __init__(self):
+        pass
+
+    def get_volume_list(self):
+        raise NotImplementedError()
+
+    def get_volumes_detail(self, volume_id):
+        raise NotImplementedError()
+
+    def add_volume_metadata(self, volume_id, **kwargs):
+        raise NotImplementedError()
+
+    def delete_volume_metadata(self, peer_id, **kwargs):
+        raise NotImplementedError()
