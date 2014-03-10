@@ -124,22 +124,21 @@ class Controller(object):
         :raises HTTPForbidden if volume metadata not allowed
                 to register
         """
-        store = volume_meta.get('store')
         volume_meta['status'] = 'creating'
 
 
         try:
-            volume_meta = self.executor.add_image_metadata(req.context,
-                                                           volume_meta)
+            volume_meta = self.executor.add_volume_metadata(req.context,
+                                                            volume_meta)
         except exception.Duplicate:
-            msg = (_("An image with identifier %s already exists") %
+            msg = (_("An volume with identifier %s already exists") %
                    volume_meta['id'])
             LOG.debug(msg)
             raise HTTPConflict(explanation=msg,
                                request=req,
                                content_type="text/plain")
         except exception.Invalid as e:
-            msg = _("Failed to register image. Got error: %(e)s") % {'e': e}
+            msg = _("Failed to register volume. Got error: %(e)s") % {'e': e}
             for line in msg.split('\n'):
                 LOG.debug(line)
             raise HTTPBadRequest(explanation=msg,
