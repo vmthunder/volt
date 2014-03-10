@@ -18,6 +18,8 @@
 from webob.exc import HTTPBadRequest
 from webob.exc import HTTPForbidden
 from webob.exc import HTTPConflict
+from webob.exc import HTTPNotFound
+from webob import Response
 import eventlet
 
 from voltracker.common import policy
@@ -96,19 +98,46 @@ class Controller(object):
             ]}
         """
         self._enforce(req, 'get_volumes')
-        params = self._get_query_params(req)
         try:
-            volumes = self.executor.get_volumes_list(req.context, **params)
+            volumes = self.executor.get_volumes_list(req.context)
         except exception.Invalid as e:
             raise HTTPBadRequest(explanation="%s" % e)
 
         return dict(volumes=volumes)
 
-    def query(self, req):
-        pass
+    def remove(self, req, peer_id):
+        """
+        Remove the volume metadata from Voltracker
 
-    def remove(self, req):
-        pass
+        :param req: The WSGI/Webob Request object
+        :param peer_id: The opaque volume identifier allocated by
+                        voltracker.
+
+        :raises HttpBadRequest if volume registry is invalid
+        :raises HttpNotFound if volume is not available
+        :raises HttpUnauthorized if volume is not deleteable by the
+        requesting user
+        """
+        self._enforce(req, 'remove_volume')
+
+        try:
+            self.executor.delete_volume_metadata(req.context, peer_id)
+        except exception.NotFound as e:
+            msg = _("Failed to find volume to delete: %(e)s") % {'e': e}
+            for line in msg.split('\n'):
+                LOG.info(line)
+            raise HTTPNotFound(explanation=msg,
+                               request=req,
+                               content_type="text/plain")
+        except exception.Forbidden as e:
+            msg = _("Forbidden to delete volume: %(e)s") % {'e': e}
+            for line in msg.split('\n'):
+                LOG.info(line)
+            raise HTTPForbidden(explanation=msg,
+                                request=req,
+                                content_type="text/plain")
+        else:
+            return Response(body='', status=200)
 
     def register(self, req, volume_meta):
         """
@@ -124,9 +153,7 @@ class Controller(object):
         :raises HTTPForbidden if volume metadata not allowed
                 to register
         """
-        volume_meta['status'] = 'creating'
-
-
+        self._enforce(req, 'register_volume')
         try:
             volume_meta = self.executor.add_volume_metadata(req.context,
                                                             volume_meta)
@@ -151,16 +178,34 @@ class Controller(object):
                                 request=req,
                                 content_type="text/plain")
 
-        self._enforce(req, 'register_volume')
-
         id = volume_meta['id']
 
-        volume_meta = self._handle_source(req, id, volume_meta, volume_meta)
-
         return {'volume_meta': volume_meta}
+
+    def query(self, req, volume_id):
+        """
+        Returns detailed information for all available volumes with id
+        <volume_id>
+
+        :param req: The WSGI/Webob Request object
+        :param id: The volume id of the query
+        :retval The response body is a mapping of the following form::
+
+            {'volumes': [
+                {'host': <HOST>,
+                 'ip': <IP>,
+                 'iqn': <IQN>,
+                 'lun': <LUN>}, ...
+            ]}
+        """
+        self._enforce(req, 'get_volumes')
+        try:
+            volumes = self.executor.get_volumes_detail(req.context, volume_id)
+        except exception.Invalid as e:
+            raise HTTPBadRequest(explanation="%s" % e)
+        return dict(volumes=volumes)
 
 
 def create_resource():
     """Volumes resource factory method"""
     return wsgi.Resource(Controller())
-
