@@ -23,6 +23,46 @@
 from collections import deque
 
 from voltracker.common import exception
+from voltracker import executor
+
+
+def parse_to_peer_id(host, port, iqn, lun):
+
+    try:
+        peer_id = host + ':' + port + ':' + iqn + ':' + lun
+    except TypeError:
+        param = ''
+        if host is None:
+            param += 'host'
+        if port is None:
+            param += 'port'
+        if iqn is None:
+            param += 'iqn'
+        if lun is None:
+            param += 'lun'
+        extra_msg = _('The param can\'t be None.')
+        raise exception.InvalidParameterValue(param=param,
+                                              value=None,)
+
+    return peer_id
+
+
+def parse_from_peer_id(peer_id):
+    items = peer_id.split(':')
+
+    if len(items) is not 4:
+        extra_msg = _("The peer_id seems invalid, "
+                      "please check if there are exactly 3 colons in peer_id")
+        raise exception.InvalidParameterValue(param='peer_id',
+                                              value=peer_id,
+                                              extra_msg=extra_msg)
+    else:
+        host, port, iqn, lun = items
+
+    return {
+        'host': host, 'port': port,
+        'iqn': iqn, 'lun': lun
+    }
 
 
 def tree_find_available_slot(tree_root):
@@ -88,12 +128,27 @@ def tree_remove_by_node(self, target):
 
     return True
 
+
 class BTreeNode(object):
 
-    def __init__(self, peer_id=None, left=None,
-                 right=None, parent=None):
+    def __init__(self, peer_id=None, host=None,
+                 port=None, iqn=None, lun=None,
+                 left=None, right=None, parent=None):
+
+        if not peer_id:
+            peer_id = parse_to_peer_id(host, port, iqn, lun)
+        else:
+            info = parse_from_peer_id(peer_id)
+            if info['host'] != host or \
+               info['port'] != port or \
+               info['iqn'] != iqn or \
+               info['lun'] != lun:
+                extra_msg = 'The peer_id is inconsistent with other' \
+                            'volume information.'
+                raise exception.InvalidParameterValue(extra_msg=extra_msg)
 
         self.peer = peer_id
+        self.host = host
         self.left = left
         self.right = right
         self.parent = parent
@@ -173,6 +228,9 @@ class BTree(object):
 
         return target
 
+    def count(self):
+        return len(self.nodes)
+
     def get_node_parent(self, peer_id):
         """ Get the parent of a node
 
@@ -186,3 +244,72 @@ class BTree(object):
 
         node = self.nodes[peer_id]
         return node.parent
+
+
+class BtreeExecutor(executor.Executor):
+    """
+    """
+    def __init__(self):
+        self.volumes = {}
+
+
+    def get_volumes_list(self):
+        volumes_list = []
+        for volume_id in self.volumes:
+            volumes_list.append({
+                'id': volume_id,
+                'count': self.volumes[volume_id].count(),
+            })
+
+        return {'volumes': volumes_list}
+
+    def get_volumes_detail(self, volume_id):
+        volumes_list = []
+        volumes_tree = self.volumes.get(volume_id, None)
+        for peer_id in volumes_tree.nodes:
+            tree_node = self.nodes[peer_id]
+            volumes_list.append({
+                'host': tree_node.host,
+                'port': tree_node.port,
+                'iqn': tree_node.iqn,
+                'lun': tree_node.lun
+            })
+
+        return {'volumes': volumes_list}
+
+    def add_volume_metadata(self, volume_id, **kwargs):
+        """
+        """
+        host = kwargs.get('host', None)
+        port = kwargs.get('port', None)
+        iqn = kwargs.get('iqn', None)
+        lun = kwargs.get('lun', None)
+        peer_id = parse_to_peer_id(host, port, iqn, lun)
+
+        if volume_id not in self.volumes:
+            self.volumes[volume_id] = BTree(BTreeNode(peer_id))
+        else:
+            self.volumes[volume_id].insert_by_peer_id(peer_id)
+
+    def delete_volume_metadata(self, volume_id, peer_id=None, **kwargs):
+        """
+        """
+        if peer_id is None:
+            host = kwargs.get('host', None)
+            port = kwargs.get('port', None)
+            iqn = kwargs.get('iqn', None)
+            lun = kwargs.get('lun', None)
+            peer_id = parse_to_peer_id(host, port, iqn, lun)
+
+        if volume_id not in self.volumes:
+            raise exception.NotFound
+        else:
+            try:
+                vol_tree = self.volumes[volume_id]
+                vol_tree.remove_by_peer_id(peer_id)
+            except exception.InvalidParameterValue, e:
+                raise exception.NotFound
+
+            
+
+

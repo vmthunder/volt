@@ -45,7 +45,7 @@ class Executor(object):
     def __init__(self):
         pass
 
-    def get_volume_list(self):
+    def get_volumes_list(self):
         raise NotImplementedError()
 
     def get_volumes_detail(self, volume_id):

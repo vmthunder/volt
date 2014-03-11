@@ -106,7 +106,7 @@ class Controller(object):
 
         return dict(volumes=volumes)
 
-    def remove(self, req, peer_id):
+    def remove(self, req, volume_id, peer_id):
         """
         Remove the volume metadata from Voltracker
 
@@ -120,7 +120,8 @@ class Controller(object):
 
         params = self._get_query_params(req)
         try:
-            self.executor.delete_volume_metadata(peer_id, params)
+            self.executor.delete_volume_metadata(volume_id,
+                                                 peer_id, params)
         except exception.NotFound as e:
             msg = _("Failed to find volume to delete: %(e)s") % {'e': e}
             for line in msg.split('\n'):
