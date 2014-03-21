@@ -2,6 +2,6 @@
 Usage
 ========
 
-To use voltracker in a project::
+To use volt in a project::
 
-	import voltracker
+	import volt

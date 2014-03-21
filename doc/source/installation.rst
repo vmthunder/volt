@@ -4,9 +4,9 @@ Installation
 
 At the command line::
 
-    $ pip install voltracker
+    $ pip install volt
 
 Or, if you have virtualenvwrapper installed::
 
-    $ mkvirtualenv voltracker
-    $ pip install voltracker
+    $ mkvirtualenv volt
+    $ pip install volt
