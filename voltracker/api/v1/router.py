@@ -15,6 +15,7 @@
 
 
 from voltracker.api.v1 import volumes
+from voltracker.api.v1 import members
 from voltracker.common import wsgi
 
 
@@ -49,5 +50,12 @@ class API(wsgi.Router):
                        controller=volumes_resource,
                        action="remove",
                        conditions={'method': ['DELETE']})
+
+        members_resource = members.create_resource()
+
+        mapper.connect("/members/heartbeat",
+                       controller=members_resource,
+                       action="heartbeat",
+                       conditions={'method': ['GET']})
 
         super(API, self).__init__(mapper)

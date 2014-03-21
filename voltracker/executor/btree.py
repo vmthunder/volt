@@ -24,12 +24,13 @@ from collections import deque
 
 from voltracker.common import exception
 from voltracker import executor
+from voltracker.openstack.common.gettextutils import _
 
 
 def parse_to_peer_id(host, port, iqn, lun):
 
     try:
-        peer_id = host + ':' + port + ':' + iqn + ':' + lun
+        peer_id = host + ',' + port + ',' + iqn + ',' + lun
     except TypeError:
         param = ''
         if host is None:
@@ -48,11 +49,11 @@ def parse_to_peer_id(host, port, iqn, lun):
 
 
 def parse_from_peer_id(peer_id):
-    items = peer_id.split(':')
+    items = peer_id.split(',')
 
     if len(items) is not 4:
         extra_msg = _("The peer_id seems invalid, "
-                      "please check if there are exactly 3 colons in peer_id")
+                      "please check whether the peer id is correct.")
         raise exception.InvalidParameterValue(param='peer_id',
                                               value=peer_id,
                                               extra_msg=extra_msg)
@@ -75,7 +76,7 @@ def tree_find_available_slot(tree_root):
 
     slot = None
     while len(node_queue):
-        node = node_queue.pop()
+        node = node_queue.popleft()
         if node.available():
             slot = node
             break
@@ -84,49 +85,6 @@ def tree_find_available_slot(tree_root):
             node_queue.append(node.right)
 
     return slot
-
-def tree_remove_by_node(self, target):
-    """Delete a tree node with the specific node instance
-
-    :param target: the target instance of the node to be removed
-    """
-
-    if not target:
-        extra_msg = _('The node to be removed is not in the tree')
-        raise exception.InvalidParameterValue(value=None,
-                                              param='node',
-                                              extra_msg=extra_msg)
-
-    up = None
-    # TODO(zpfalpc23@gmail.com): After the node removal, the tree
-    # need to be more balanced.
-    if target.left and target.right:
-        up = target.left
-        current = target
-        # Always terminated in finite loop
-        while not current.available():
-            if current.right:
-                current = current.right
-
-        target.right.parent = current
-        if not current.left:
-            current.left = target.right
-        else:
-            current.right = target.left
-    elif target.left:
-        up = target.left
-    elif target.right:
-        up = target.right
-
-    if up:
-        up.parent = target.parent
-    if target.parent:
-        if target.left is target:
-            target.left = up
-        else:
-            target.right = up
-
-    return True
 
 
 class BTreeNode(object):
@@ -139,15 +97,15 @@ class BTreeNode(object):
             peer_id = parse_to_peer_id(host, port, iqn, lun)
         else:
             info = parse_from_peer_id(peer_id)
-            if info['host'] != host or \
-               info['port'] != port or \
-               info['iqn'] != iqn or \
-               info['lun'] != lun:
+            if host and info['host'] != host or \
+               port and info['port'] != port or \
+               iqn and info['iqn'] != iqn or \
+               lun and info['lun'] != lun:
                 extra_msg = 'The peer_id is inconsistent with other' \
                             'volume information.'
                 raise exception.InvalidParameterValue(extra_msg=extra_msg)
 
-        self.peer = peer_id
+        self.peer_id = peer_id
         self.host = host
         self.left = left
         self.right = right
@@ -180,6 +138,11 @@ class BTree(object):
             raise exception.InvalidParameterValue(value=None,
                                                   param='new_node',
                                                   extra_msg=extra_msg)
+        elif self.nodes.get(new_node.peer_id, None):
+            extra_msg = _('The new adding node has existed in tree')
+            raise exception.InvalidParameterValue(value=None,
+                                                  param='new_node',
+                                                  extra_msg=extra_msg)
         elif new_node.parent:
             extra_msg = _('the new adding node already has a parent')
             raise exception.InvalidParameterValue(value=new_node.peer_id,
@@ -188,7 +151,7 @@ class BTree(object):
 
 
         slot = tree_find_available_slot(self.root)
-        self.nodes.update[new_node.peer_id] = new_node
+        self.nodes[new_node.peer_id] = new_node
         new_node.left = None
         new_node.right = None
         new_node.parent = slot
@@ -198,6 +161,51 @@ class BTree(object):
             slot.right = new_node
 
         return slot
+
+    def tree_remove_by_node(self, target):
+        """Delete a tree node with the specific node instance
+
+        :param target: the target instance of the node to be removed
+        """
+
+        if not target:
+            extra_msg = _('The node to be removed is not in the tree')
+            raise exception.InvalidParameterValue(value=None,
+                                                  param='node',
+                                                  extra_msg=extra_msg)
+
+        up = None
+        # TODO(zpfalpc23@gmail.com): After the node removal, the tree
+        # need to be more balanced.
+        if target.left and target.right:
+            up = target.left
+            current = target
+            # Always terminated in finite loop
+            while not current.available():
+                if current.left:
+                    current = current.left
+
+            target.right.parent = current
+            if not current.left:
+                current.left = target.right
+            else:
+                current.right = target.right
+        elif target.left:
+            up = target.left
+        elif target.right:
+            up = target.right
+
+        if up:
+            up.parent = target.parent
+        if target.parent:
+            if target.parent.left is target:
+                target.parent.left = up
+            else:
+                target.parent.right = up
+        if target == self.root:
+            self.root = up
+
+        return target
 
     def insert_by_peer_id(self, peer_id):
         """ Insert a new node to the binary tree by peer id.
@@ -223,7 +231,7 @@ class BTree(object):
                                                   extra_msg=extra_msg)
 
         target = self.nodes[peer_id]
-        tree_remove_by_node(target)
+        self.tree_remove_by_node(target)
         del self.nodes[peer_id]
 
         return target
@@ -309,7 +317,3 @@ class BtreeExecutor(executor.Executor):
                 vol_tree.remove_by_peer_id(peer_id)
             except exception.InvalidParameterValue, e:
                 raise exception.NotFound
-
-            
-
-

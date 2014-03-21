@@ -19,6 +19,8 @@
 import six
 import six.moves.urllib.parse as urlparse
 
+from voltracker.openstack.common.gettextutils import _
+
 _FATAL_EXCEPTION_FORMAT_ERRORS = False
 
 

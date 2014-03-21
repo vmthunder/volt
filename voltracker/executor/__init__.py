@@ -17,12 +17,16 @@
 
 
 from oslo.config import cfg
-from stevedore import named
+from stevedore import driver
+
+from voltracker.openstack.common.gettextutils import _
+
+EXECUTOR_NAMESPACE = 'voltracker.executor'
 
 executor_opts = [
     cfg.StrOpt('default_executor', default='btree',
-               help=_('The default volume tracker'
-                      ' algorithm executor.')),
+               help=_('The default volume tracker algorithm executor.')
+    ),
 ]
 
 CONF = cfg.CONF
@@ -30,11 +34,11 @@ CONF.register_opts(executor_opts)
 
 
 def get_default_executor():
-    executor = named.NamedExtensionManager(
-        namespace='voltracker.executor',
-        names=CONF.default_exectuor,
+    executor = driver.DriverManager(
+        EXECUTOR_NAMESPACE,
+        CONF.default_executor,
         invoke_on_load=True,
-        invoke_args=[CONF]
+        invoke_args=CONF
     )
     return executor
 

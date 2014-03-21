@@ -43,7 +43,7 @@ class Controller(object):
         GET /volumes -- Returns a set of brief metadata about volumes
         HEAD /volumes/<ID> -- Returns detailed metadata about volumes
                             with id <ID>
-        GET /volumes/qurey/<ID> -- Search volumes metadata about volumes
+        GET /volumes/<ID> -- Search volumes metadata about volumes
                              matching the id <ID>. Because the client
                              uses this result to build the iscsi
                              connections, in order to promote overall
