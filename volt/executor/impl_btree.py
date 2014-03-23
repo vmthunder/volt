@@ -269,12 +269,16 @@ class BtreeExecutor(executor.Executor):
                 'count': self.volumes[volume_id].count(),
             })
 
-        return {'volumes': volumes_list}
+        return volumes_list
 
     def get_volumes_detail(self, volume_id):
         volumes_list = []
         volumes_tree = self.volumes.get(volume_id, None)
-        for peer_id in volumes_tree.nodes:
+        if volumes_tree is None:
+            volumes_nodes = []
+        else:
+            volumes_nodes = volumes_tree.nodes
+        for peer_id in volumes_nodes:
             tree_node = self.nodes[peer_id]
             volumes_list.append({
                 'host': tree_node.host,
@@ -283,7 +287,7 @@ class BtreeExecutor(executor.Executor):
                 'lun': tree_node.lun
             })
 
-        return {'volumes': volumes_list}
+        return volumes_list
 
     def add_volume_metadata(self, volume_id, **kwargs):
         """
@@ -298,6 +302,8 @@ class BtreeExecutor(executor.Executor):
             self.volumes[volume_id] = BTree(BTreeNode(peer_id))
         else:
             self.volumes[volume_id].insert_by_peer_id(peer_id)
+
+        return self.volumes[volume_id].nodes[peer_id]
 
     def delete_volume_metadata(self, volume_id, peer_id=None, **kwargs):
         """

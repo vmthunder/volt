@@ -105,7 +105,7 @@ class Controller(object):
         except exception.Invalid as e:
             raise HTTPBadRequest(explanation="%s" % e)
 
-        return dict(volumes=volumes)
+        return volumes
 
     def remove(self, req, volume_id, peer_id):
         """
@@ -166,7 +166,7 @@ class Controller(object):
                                  request=req,
                                  content_type="text/plain")
 
-        return {'volume_meta': volume_meta}
+        return volume_meta
 
     def query(self, req, volume_id):
         """
@@ -188,7 +188,7 @@ class Controller(object):
         #self._enforce(req, 'get_volumes')
 
         volumes = self.executor.get_volumes_detail(volume_id)
-        return dict(volumes=volumes)
+        return volumes
 
 
 def create_resource():

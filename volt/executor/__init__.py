@@ -38,7 +38,7 @@ def get_default_executor():
         EXECUTOR_NAMESPACE, CONF.default_executor,
         invoke_on_load=True
     )
-    return executor.driver()
+    return executor.driver
 
 
 class Executor(object):
