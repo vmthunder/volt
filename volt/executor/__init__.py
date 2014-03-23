@@ -17,7 +17,7 @@
 
 
 from oslo.config import cfg
-from stevedore import named
+from stevedore import driver
 
 from volt.openstack.common.gettextutils import _
 
@@ -34,12 +34,11 @@ CONF.register_opts(executor_opts)
 
 
 def get_default_executor():
-    executor = named.NamedExtensionManager(
-        EXECUTOR_NAMESPACE,
-        CONF.default_executor,
+    executor = driver.DriverManager(
+        EXECUTOR_NAMESPACE, CONF.default_executor,
         invoke_on_load=True
     )
-    return executor
+    return executor.driver()
 
 
 class Executor(object):

@@ -53,7 +53,7 @@ bind_opts = [
     cfg.StrOpt('bind_host', default='0.0.0.0',
                help=_('Address to bind the server.  Useful when '
                       'selecting a particular network interface.')),
-    cfg.IntOpt('bind_port',
+    cfg.IntOpt('bind_port', default='7447',
                help=_('The port on which the server will listen.')),
 ]
 
@@ -618,6 +618,8 @@ class Resource(object):
         """WSGI method that controls (de)serialization and method dispatch."""
         action_args = self.get_action_args(request.environ)
         action = action_args.pop('action', None)
+        LOG.debug(_("request.environ = %(environ)s"),
+                  {'environ': request.environ})
 
         try:
             deserialized_request = self.dispatch(self.deserializer,

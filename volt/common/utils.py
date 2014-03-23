@@ -31,6 +31,8 @@ volume_META_HEADERS = [
     'x-volume-meta-iqn', 'x-volume-meta-lun',
 ]
 
+VOLT_TEST_SOCKET_FD_STR = 'VOLT_TEST_SOCKET_FD'
+
 
 def get_volume_meta_from_headers(response):
     """
@@ -145,3 +147,28 @@ def validate_key_cert(key_file, cert_file):
                              "error %(ce)s") % {'cert_file': cert_file,
                                                 'key_file': key_file,
                                                 'ce': ce})
+
+
+def get_test_suite_socket():
+    global VOLT_TEST_SOCKET_FD_STR
+    if VOLT_TEST_SOCKET_FD_STR in os.environ:
+        fd = int(os.environ[VOLT_TEST_SOCKET_FD_STR])
+        sock = socket.fromfd(fd, socket.AF_INET, socket.SOCK_STREAM)
+        sock = socket.SocketType(_sock=sock)
+        sock.listen(CONF.backlog)
+        del os.environ[VOLT_TEST_SOCKET_FD_STR]
+        os.close(fd)
+        return sock
+    return None
+
+
+def is_uuid_like(val):
+    """Returns validation of a value as a UUID.
+
+    For our purposes, a UUID is a canonical form string:
+    aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+    """
+    try:
+        return str(uuid.UUID(val)) == val
+    except (TypeError, ValueError, AttributeError):
+        return False

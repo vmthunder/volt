@@ -98,7 +98,7 @@ class Controller(object):
                  'count': <COUNT>}, ...
             ]}
         """
-        self._enforce(req, 'get_volumes')
+        #self._enforce(req, 'get_volumes')
 
         try:
             volumes = self.executor.get_volumes_list()
@@ -117,7 +117,7 @@ class Controller(object):
 
         :raises HttpNotFound if volume is not available
         """
-        self._enforce(req, 'remove_volume')
+        #self._enforce(req, 'remove_volume')
 
         params = self._get_query_params(req)
         try:
@@ -145,7 +145,7 @@ class Controller(object):
         :raises HTTPConflict if volume already exists
         :raises HTTPBadRequest if volume metadata is not valid
         """
-        self._enforce(req, 'register_volume')
+        #self._enforce(req, 'register_volume')
 
         params = self._get_query_params(req)
         try:
@@ -185,7 +185,7 @@ class Controller(object):
             ]}
 
         """
-        self._enforce(req, 'get_volumes')
+        #self._enforce(req, 'get_volumes')
 
         volumes = self.executor.get_volumes_detail(volume_id)
         return dict(volumes=volumes)
