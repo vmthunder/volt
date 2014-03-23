@@ -27,6 +27,7 @@ from volt.common import exception
 from volt import executor
 from volt.common import wsgi
 from volt.openstack.common import log as logging
+from volt.openstack.common.gettextutils import _
 
 SUPPORTED_PARAMS = ('host', 'port', 'iqn', 'lun')
 

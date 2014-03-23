@@ -23,6 +23,8 @@ from OpenSSL import crypto
 
 from volt.common import exception
 from volt.openstack.common import strutils
+from volt.openstack.common.gettextutils import _
+
 
 volume_META_HEADERS = [
     'x-volume-meta-host', 'x-volume-meta-port',

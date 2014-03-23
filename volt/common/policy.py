@@ -25,6 +25,8 @@ from volt.common import exception
 from volt.openstack.common import jsonutils
 from volt.openstack.common import log as logging
 from volt.openstack.common import policy
+from volt.openstack.common.gettextutils import _
+
 
 LOG = logging.getLogger(__name__)
 
