@@ -46,6 +46,7 @@ from volt.common import utils
 from volt.openstack.common import gettextutils
 from volt.openstack.common import jsonutils
 from volt.openstack.common import log as logging
+from volt.openstack.common.gettextutils import _
 
 
 bind_opts = [
