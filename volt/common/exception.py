@@ -19,7 +19,7 @@
 import six
 import six.moves.urllib.parse as urlparse
 
-from Volt.openstack.common.gettextutils import _
+from volt.openstack.common.gettextutils import _
 
 _FATAL_EXCEPTION_FORMAT_ERRORS = False
 
