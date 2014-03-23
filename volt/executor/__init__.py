@@ -37,8 +37,7 @@ def get_default_executor():
     executor = named.NamedExtensionManager(
         EXECUTOR_NAMESPACE,
         CONF.default_executor,
-        invoke_on_load=True,
-        invoke_args=(CONF)
+        invoke_on_load=True
     )
     return executor
 
