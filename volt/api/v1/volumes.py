@@ -190,7 +190,7 @@ class Controller(object):
         """
         #self._enforce(req, 'get_volumes')
         try:
-            volumes = self.executor.get_volumes_detail(volume_id, peer_id)
+            volumes = self.executor.get_volume_parents(volume_id, peer_id)
         except exception.NotFound as e:
             msg = _("this volume is not found in tracker.")
             raise HTTPNotFound(explanation=msg,
