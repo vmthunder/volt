@@ -78,8 +78,8 @@ class Controller(object):
         """
         params = {}
         for PARAM in SUPPORTED_PARAMS:
-            if PARAM in req.params:
-                params[PARAM] = req.params.get(PARAM)
+            if PARAM in req:
+                params[PARAM] = req.get(PARAM)
 
         return params
 
@@ -110,22 +110,23 @@ class Controller(object):
 
         return volumes
 
-    def remove(self, req, volume_id, peer_id):
+    def remove(self, req, volume_id, peer_id=None, body={}):
         """
         Remove the volume metadata from Volt
 
         :param req: The WSGI/Webob Request object
+        :param volume_id: The volume identifier of the volume.
         :param peer_id: The opaque volume identifier allocated by
                         volt
 
         :raises HttpNotFound if volume is not available
         """
         #self._enforce(req, 'remove_volume')
-
-        params = self._get_query_params(req)
+        params = self._get_query_params(body)
         try:
-            self.executor.delete_volume_metadata(volume_id,
-                                                 peer_id, params)
+            LOG.debug(_("volume_id = %(volume_id)s, peer_id = %(peer_id)s"),
+                       {"volume_id": volume_id, "peer_id": peer_id})
+            self.executor.delete_volume_metadata(volume_id, peer_id, **params)
         except exception.NotFound as e:
             msg = _("Failed to find volume to delete: %(e)s") % {'e': e}
             for line in msg.split('\n'):
@@ -136,7 +137,7 @@ class Controller(object):
         else:
             return Response(body='', status=200)
 
-    def register(self, req, volume_id):
+    def register(self, req, volume_id, body=None):
         """
         Adds the volume metadata to the registry and assigns
         an volume identifier if one is not supplied in the request
@@ -149,14 +150,12 @@ class Controller(object):
         :raises HTTPBadRequest if volume metadata is not valid
         """
         #self._enforce(req, 'register_volume')
-
-        params = self._get_query_params(req)
+        params = self._get_query_params(body)
         try:
-            volume_meta = self.executor.add_volume_metadata(volume_id,
-                                                            params)
-        except exception.Duplicate:
+            volume_meta = self.executor.add_volume_metadata(volume_id, **params)
+        except exception.DuplicateItem:
             msg = (_("An volume with identifier %s already exists") %
-                   volume_meta['id'])
+                   volume_id)
             LOG.debug(msg)
             raise HTTPConflict(explanation=msg,
                                request=req,

@@ -42,11 +42,11 @@ class API(wsgi.Router):
                        controller=volumes_resource,
                        action='register',
                        conditions={'method': ['POST']})
-        mapper.connect("/volumes/{volume_id}",
+        mapper.connect("/volumes/{volume_id}/{peer_id}",
                        controller=volumes_resource,
                        action='remove',
                        conditions={'method': ['DELETE']})
-        mapper.connect("/volumes",
+        mapper.connect("/volumes/{volume_id}",
                        controller=volumes_resource,
                        action="remove",
                        conditions={'method': ['DELETE']})

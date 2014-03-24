@@ -22,9 +22,13 @@
 
 from collections import deque
 
+from volt.common import utils
 from volt.common import exception
 from volt import executor
 from volt.openstack.common.gettextutils import _
+from volt.openstack.common import log as logging
+
+LOG = logging.getLogger(__name__)
 
 
 def parse_to_peer_id(host, port, iqn, lun):
@@ -104,9 +108,17 @@ class BTreeNode(object):
                 extra_msg = 'The peer_id is inconsistent with other' \
                             'volume information.'
                 raise exception.InvalidParameterValue(extra_msg=extra_msg)
+            else:
+                host = info['host']
+                port = info['port']
+                iqn = info['iqn']
+                lun = info['lun']
 
         self.peer_id = peer_id
         self.host = host
+        self.port = port
+        self.iqn = iqn
+        self.lun = lun
         self.left = left
         self.right = right
         self.parent = parent
@@ -116,11 +128,27 @@ class BTreeNode(object):
         """
         return not self.left or not self.right
 
+    def identity(self):
+        """ Make BTreeNode callable to return to client.
+        """
+        return {
+            "host" : self.host,
+            "port" : self.port,
+            "iqn": self.iqn,
+            "lun": self.lun,
+            "peer_id": self.peer_id
+        }
+
 
 class BTree(object):
 
-    def __init__(self, root, volume_id=None):
+    def __init__(self, volume_id, root=None):
 
+        if root == None:
+            root = BTreeNode(peer_id=None, host=utils.generate_uuid(),
+                             port=utils.generate_uuid(), 
+                             iqn=utils.generate_uuid(),
+                             lun=utils.generate_uuid())
         root.left = None
         root.right = None
         root.parent = None
@@ -296,14 +324,16 @@ class BtreeExecutor(executor.Executor):
         port = kwargs.get('port', None)
         iqn = kwargs.get('iqn', None)
         lun = kwargs.get('lun', None)
+        LOG.debug(_("host = %(host)s, port = %(port)s, iqn = %(iqn)s,"
+                    " lun = %(lun)s"), {'host': host, 'port': port, 'iqn': iqn,
+                     'lun': lun})
         peer_id = parse_to_peer_id(host, port, iqn, lun)
 
         if volume_id not in self.volumes:
-            self.volumes[volume_id] = BTree(BTreeNode(peer_id))
-        else:
-            self.volumes[volume_id].insert_by_peer_id(peer_id)
+            self.volumes[volume_id] = BTree(volume_id)
+        self.volumes[volume_id].insert_by_peer_id(peer_id)
 
-        return self.volumes[volume_id].nodes[peer_id]
+        return self.volumes[volume_id].nodes[peer_id].identity()
 
     def delete_volume_metadata(self, volume_id, peer_id=None, **kwargs):
         """

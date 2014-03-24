@@ -172,3 +172,6 @@ def is_uuid_like(val):
         return str(uuid.UUID(val)) == val
     except (TypeError, ValueError, AttributeError):
         return False
+
+def generate_uuid():
+    return str(uuid.uuid1())
