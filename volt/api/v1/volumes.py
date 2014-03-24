@@ -170,7 +170,7 @@ class Controller(object):
 
         return volume_meta
 
-    def query(self, req, volume_id):
+    def query(self, req, volume_id, peer_id):
         """
         Returns detailed information for all available volumes with id
         <volume_id>
@@ -188,8 +188,7 @@ class Controller(object):
 
         """
         #self._enforce(req, 'get_volumes')
-
-        volumes = self.executor.get_volumes_detail(volume_id)
+        volumes = self.executor.get_volumes_detail(volume_id, peer_id)
         return volumes
 
 
