@@ -58,3 +58,6 @@ class Executor(object):
 
     def delete_volume_metadata(self, peer_id, **kwargs):
         raise NotImplementedError()
+
+    def get_volume_parents(self, volume_id, peer_id):
+        raise NotImplementedError()

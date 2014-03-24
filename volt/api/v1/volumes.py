@@ -19,6 +19,7 @@ from webob.exc import HTTPBadRequest
 from webob.exc import HTTPForbidden
 from webob.exc import HTTPConflict
 from webob.exc import HTTPNotFound
+
 from webob import Response
 import eventlet
 
@@ -188,7 +189,16 @@ class Controller(object):
 
         """
         #self._enforce(req, 'get_volumes')
-        volumes = self.executor.get_volumes_detail(volume_id, peer_id)
+        try:
+            volumes = self.executor.get_volumes_detail(volume_id, peer_id)
+        except exception.NotFound as e:
+            msg = _("this volume is not found in tracker.")
+            raise HTTPNotFound(explanation=msg,
+                               request=req,
+                               content_type="text/plain")
+        except exception.InvalidParameterValue:
+            raise HTTPBadRequest()
+
         return volumes
 
 

@@ -144,7 +144,7 @@ class BTree(object):
 
     def __init__(self, volume_id, root=None):
 
-        if root == None:
+        if root is None:
             root = BTreeNode(peer_id=None, host=utils.generate_uuid(),
                              port=utils.generate_uuid(), 
                              iqn=utils.generate_uuid(),
@@ -353,3 +353,31 @@ class BtreeExecutor(executor.Executor):
                 vol_tree.remove_by_peer_id(peer_id)
             except exception.InvalidParameterValue, e:
                 raise exception.NotFound
+
+    def get_volume_parents(self, volume_id, peer_id):
+        """
+        """
+        if peer_id is None:
+            extra_msg = _('peer_id should not be None.')
+            raise exception.InvalidParameterValue(value=peer_id,
+                                                  param='peer_id',
+                                                  extra_msg=extra_msg)
+
+        if volume_id is None:
+            extra_msg = _('volume_id should not be None.')
+            raise exception.InvalidParameterValue(value=peer_id,
+                                                  param='peer_id',
+                                                  extra_msg=extra_msg)
+
+        if volume_id not in self.volumes:
+            raise exception.NotFound
+        elif peer_id not in self.volumes[volume_id].nodes:
+            raise exception.NotFound
+
+        target = self.volumes[volume_id].nodes[peer_id]
+        if target.parent == self.volumes[volume_id].root:
+            return []
+        else:
+            return [target.parent.identity()]
+
+
