@@ -83,7 +83,7 @@ class Controller(object):
 
         return params
 
-    def index(self, req, volume_id):
+    def index(self, req, volume_id=None):
         """
         Returns the following information for all tracked volumes:
 
