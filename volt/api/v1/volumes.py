@@ -83,7 +83,7 @@ class Controller(object):
 
         return params
 
-    def index(self, req):
+    def index(self, volume_id):
         """
         Returns the following information for all tracked volumes:
 
@@ -101,7 +101,10 @@ class Controller(object):
         #self._enforce(req, 'get_volumes')
 
         try:
-            volumes = self.executor.get_volumes_list()
+            if volume_id is None:
+                volumes = self.executor.get_volumes_list()
+            else:
+                volumes = self.executor.get_volumes_detail(volume_id)
         except exception.Invalid as e:
             raise HTTPBadRequest(explanation="%s" % e)
 
