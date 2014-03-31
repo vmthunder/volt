@@ -32,13 +32,13 @@ executor_opts = [
 CONF = cfg.CONF
 CONF.register_opts(executor_opts)
 
-
 def get_default_executor():
     executor = driver.DriverManager(
         EXECUTOR_NAMESPACE, CONF.default_executor,
         invoke_on_load=True
     )
     return executor.driver
+
 
 
 class Executor(object):
@@ -53,11 +53,11 @@ class Executor(object):
     def get_volumes_detail(self, volume_id):
         raise NotImplementedError()
 
-    def add_volume_metadata(self, volume_id, **kwargs):
+    def add_volume_metadata(self, volume_id, peer_id, **kwargs):
         raise NotImplementedError()
 
-    def delete_volume_metadata(self, peer_id, **kwargs):
+    def delete_volume_metadata(self, volume_id,  peer_id):
         raise NotImplementedError()
 
-    def get_volume_parents(self, volume_id, peer_id):
+    def get_volume_parents(self, volume_id, peer_id=None, host=None):
         raise NotImplementedError()

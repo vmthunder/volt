@@ -31,45 +31,6 @@ from volt.openstack.common import log as logging
 LOG = logging.getLogger(__name__)
 
 
-def parse_to_peer_id(host, port, iqn, lun):
-
-    try:
-        peer_id = host + ',' + port + ',' + iqn + ',' + lun
-    except TypeError:
-        param = ''
-        if host is None:
-            param += 'host'
-        if port is None:
-            param += 'port'
-        if iqn is None:
-            param += 'iqn'
-        if lun is None:
-            param += 'lun'
-        extra_msg = _('The param can\'t be None.')
-        raise exception.InvalidParameterValue(param=param,
-                                              value=None,)
-
-    return peer_id
-
-
-def parse_from_peer_id(peer_id):
-    items = peer_id.split(',')
-
-    if len(items) is not 4:
-        extra_msg = _("The peer_id seems invalid, "
-                      "please check whether the peer id is correct.")
-        raise exception.InvalidParameterValue(param='peer_id',
-                                              value=peer_id,
-                                              extra_msg=extra_msg)
-    else:
-        host, port, iqn, lun = items
-
-    return {
-        'host': host, 'port': port,
-        'iqn': iqn, 'lun': lun
-    }
-
-
 def tree_find_available_slot(tree_root):
     """
     Use the breadth first search algorithm to find the first node
@@ -95,24 +56,11 @@ class BTreeNode(object):
 
     def __init__(self, peer_id=None, host=None,
                  port=None, iqn=None, lun=None,
-                 left=None, right=None, parent=None):
+                 left=None, right=None, parent=None,
+                 status=None):
 
         if not peer_id:
-            peer_id = parse_to_peer_id(host, port, iqn, lun)
-        else:
-            info = parse_from_peer_id(peer_id)
-            if host and info['host'] != host or \
-               port and info['port'] != port or \
-               iqn and info['iqn'] != iqn or \
-               lun and info['lun'] != lun:
-                extra_msg = 'The peer_id is inconsistent with other' \
-                            'volume information.'
-                raise exception.InvalidParameterValue(extra_msg=extra_msg)
-            else:
-                host = info['host']
-                port = info['port']
-                iqn = info['iqn']
-                lun = info['lun']
+            peer_id = utils.generate_uuid()
 
         self.peer_id = peer_id
         self.host = host
@@ -122,6 +70,7 @@ class BTreeNode(object):
         self.left = left
         self.right = right
         self.parent = parent
+        self.status = status
 
     def available(self):
         """ Return true if the node can append a child
@@ -136,6 +85,7 @@ class BTreeNode(object):
             "port" : self.port,
             "iqn": self.iqn,
             "lun": self.lun,
+            'status': self.status,
             "peer_id": self.peer_id
         }
 
@@ -177,7 +127,6 @@ class BTree(object):
                                                   param='new_node',
                                                   extra_msg=extra_msg)
 
-
         slot = tree_find_available_slot(self.root)
         self.nodes[new_node.peer_id] = new_node
         new_node.left = None
@@ -201,6 +150,12 @@ class BTree(object):
             raise exception.InvalidParameterValue(value=None,
                                                   param='node',
                                                   extra_msg=extra_msg)
+
+        if target.status == 'pending':
+            if target.left:
+                self.tree_remove_by_node(target.left)
+            if target.right:
+                self.tree_remove_by_node(target.right)
 
         up = None
         # TODO(zpfalpc23@gmail.com): After the node removal, the tree
@@ -281,13 +236,40 @@ class BTree(object):
         node = self.nodes[peer_id]
         return node.parent
 
+    def update_nodes(self, peer_id=None, host=None,
+                     port=None, iqn=None, lun=None,
+                     status=None):
+        if peer_id is None:
+            peer_id = utils.generate_uuid()
+
+        if peer_id not in self.nodes:
+            target = BTreeNode(peer_id=peer_id, host=host,
+                                 port=port, iqn=iqn, lun=lun,
+                                 status=status)
+            self.insert_by_node(target)
+        else:
+            target = self.nodes[peer_id]
+            target.peer_id = peer_id
+            target.host = host
+            target.port = port
+            target.iqn = iqn
+            target.lun = lun
+            target.status = status
+
+        if target.status == 'pending':
+            if target.left:
+                self.tree_remove_by_node(target.left)
+            if target.right:
+                self.tree_remove_by_node(target.right)
+
+        return target
+
 
 class BtreeExecutor(executor.Executor):
     """
     """
     def __init__(self):
         self.volumes = {}
-
 
     def get_volumes_list(self):
         volumes_list = []
@@ -312,12 +294,13 @@ class BtreeExecutor(executor.Executor):
                 'host': tree_node.host,
                 'port': tree_node.port,
                 'iqn': tree_node.iqn,
-                'lun': tree_node.lun
+                'lun': tree_node.lun,
+                'status': tree_node.status
             })
 
         return volumes_list
 
-    def add_volume_metadata(self, volume_id, **kwargs):
+    def add_volume_metadata(self, volume_id, peer_id, **kwargs):
         """
         """
         host = kwargs.get('host', None)
@@ -325,25 +308,28 @@ class BtreeExecutor(executor.Executor):
         iqn = kwargs.get('iqn', None)
         lun = kwargs.get('lun', None)
         LOG.debug(_("host = %(host)s, port = %(port)s, iqn = %(iqn)s,"
-                    " lun = %(lun)s"), {'host': host, 'port': port, 'iqn': iqn,
-                     'lun': lun})
-        peer_id = parse_to_peer_id(host, port, iqn, lun)
+                    " lun = %(lun)s"),
+                  {'host': host, 'port': port, 'iqn': iqn, 'lun': lun})
 
         if volume_id not in self.volumes:
-            self.volumes[volume_id] = BTree(volume_id)
-        self.volumes[volume_id].insert_by_peer_id(peer_id)
+            raise exception.NotFound
 
-        return self.volumes[volume_id].nodes[peer_id].identity()
+        target = self.volumes[volume_id].update_nodes(peer_id=peer_id,
+                                                      host=host,
+                                                      port=port,
+                                                      iqn=iqn,
+                                                      lun=lun,
+                                                      status='OK')
+        return target.identity()
 
-    def delete_volume_metadata(self, volume_id, peer_id=None, **kwargs):
+    def delete_volume_metadata(self, volume_id, peer_id):
         """
         """
         if peer_id is None:
-            host = kwargs.get('host', None)
-            port = kwargs.get('port', None)
-            iqn = kwargs.get('iqn', None)
-            lun = kwargs.get('lun', None)
-            peer_id = parse_to_peer_id(host, port, iqn, lun)
+            extra_msg = _('peer_id should not be None.')
+            raise exception.InvalidParameterValue(value=peer_id,
+                                                  param='peer_id',
+                                                  extra_msg=extra_msg)
 
         if volume_id not in self.volumes:
             raise exception.NotFound
@@ -354,11 +340,11 @@ class BtreeExecutor(executor.Executor):
             except exception.InvalidParameterValue, e:
                 raise exception.NotFound
 
-    def get_volume_parents(self, volume_id, peer_id):
+    def get_volume_parents(self, volume_id, peer_id=None, host=None):
         """
         """
-        if peer_id is None:
-            extra_msg = _('peer_id should not be None.')
+        if peer_id is None and host is None:
+            extra_msg = _('peer_id or host should not be None.')
             raise exception.InvalidParameterValue(value=peer_id,
                                                   param='peer_id',
                                                   extra_msg=extra_msg)
@@ -370,14 +356,33 @@ class BtreeExecutor(executor.Executor):
                                                   extra_msg=extra_msg)
 
         if volume_id not in self.volumes:
-            raise exception.NotFound
-        elif peer_id not in self.volumes[volume_id].nodes:
-            raise exception.NotFound
+            self.volumes[volume_id] = BTree(volume_id)
 
-        target = self.volumes[volume_id].nodes[peer_id]
-        if target.parent == self.volumes[volume_id].root:
-            return []
+        if peer_id:
+            if peer_id not in self.volumes[volume_id].nodes:
+                raise exception.NotFound
+
+            target = self.volumes[volume_id].nodes[peer_id]
+
         else:
-            return [target.parent.identity()]
+            peer_id = utils.generate_uuid(),
+            new_node = BTreeNode(peer_id=peer_id,
+                                 host=host,
+                                 status='pending')
 
+            self.volumes[volume_id].insert_by_node(new_node)
 
+            target = self.volumes[volume_id].nodes[peer_id]
+
+        if target.parent == self.volumes[volume_id].root:
+            return \
+                {
+                    'peer_id': peer_id,
+                    'parents': []
+                }
+        else:
+            return \
+                {
+                    'peer_id': peer_id,
+                    'parents': [target.parent.identity()]
+                }

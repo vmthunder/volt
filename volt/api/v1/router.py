@@ -34,11 +34,11 @@ class API(wsgi.Router):
                        controller=volumes_resource,
                        action='index',
                        conditions={'method': ['HEAD']})
-        mapper.connect("/volumes/query/{volume_id}/{peer_id}",
+        mapper.connect("/volumes/query/{volume_id}",
                        controller=volumes_resource,
                        action='query',
                        conditions={'method': ['GET']})
-        mapper.connect("/volumes/{volume_id}",
+        mapper.connect("/volumes/{volume_id}/{peer_id}",
                        controller=volumes_resource,
                        action='register',
                        conditions={'method': ['POST']})

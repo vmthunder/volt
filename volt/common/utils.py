@@ -16,7 +16,7 @@
 # under the License.
 
 import os
-import uuid
+import binascii
 
 from webob import exc
 from OpenSSL import crypto
@@ -174,4 +174,4 @@ def is_uuid_like(val):
         return False
 
 def generate_uuid():
-    return str(uuid.uuid1())
+    return binascii.hexlify(os.urandom(16))

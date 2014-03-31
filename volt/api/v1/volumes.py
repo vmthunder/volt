@@ -29,8 +29,9 @@ from volt import executor
 from volt.common import wsgi
 from volt.openstack.common import log as logging
 from volt.openstack.common.gettextutils import _
+from volt.openstack.common import jsonutils
 
-SUPPORTED_PARAMS = ('host', 'port', 'iqn', 'lun')
+SUPPORTED_PARAMS = ('host', 'port', 'iqn', 'lun', 'peer_id')
 
 LOG = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ class Controller(object):
 
         return volumes
 
-    def remove(self, req, volume_id, peer_id=None, body={}):
+    def remove(self, req, volume_id, body={}):
         """
         Remove the volume metadata from Volt
 
@@ -125,9 +126,7 @@ class Controller(object):
         #self._enforce(req, 'remove_volume')
         params = self._get_query_params(body)
         try:
-            LOG.debug(_("volume_id = %(volume_id)s, peer_id = %(peer_id)s"),
-                       {"volume_id": volume_id, "peer_id": peer_id})
-            self.executor.delete_volume_metadata(volume_id, peer_id, **params)
+            self.executor.delete_volume_metadata(volume_id, **params)
         except exception.NotFound as e:
             msg = _("Failed to find volume to delete: %(e)s") % {'e': e}
             for line in msg.split('\n'):
@@ -138,7 +137,7 @@ class Controller(object):
         else:
             return Response(body='', status=200)
 
-    def register(self, req, volume_id, body=None):
+    def register(self, req, volume_id, peer_id, body=None):
         """
         Adds the volume metadata to the registry and assigns
         an volume identifier if one is not supplied in the request
@@ -153,7 +152,8 @@ class Controller(object):
         #self._enforce(req, 'register_volume')
         params = self._get_query_params(body)
         try:
-            volume_meta = self.executor.add_volume_metadata(volume_id, **params)
+            volume_meta = self.executor.add_volume_metadata(volume_id,
+                                                            peer_id, **params)
         except exception.DuplicateItem:
             msg = (_("An volume with identifier %s already exists") %
                    volume_id)
@@ -168,10 +168,17 @@ class Controller(object):
             raise HTTPBadRequest(explanation=msg,
                                  request=req,
                                  content_type="text/plain")
+        except exception.NotFound as e:
+            msg = _("Failed to register volume. Got error: %(e)s") % {'e': e}
+            for line in msg.split('\n'):
+                LOG.debug(line)
+            raise HTTPNotFound(explanation=msg,
+                               request=req,
+                               content_type="text/plain")
 
         return volume_meta
 
-    def query(self, req, volume_id, peer_id):
+    def query(self, req, volume_id, body={}):
         """
         Returns detailed information for all available volumes with id
         <volume_id>
@@ -189,8 +196,13 @@ class Controller(object):
 
         """
         #self._enforce(req, 'get_volumes')
+        params = self._get_query_params(body)
+        host = params.get('host', None)
+        peer_id = params.get('peer_id', None)
         try:
-            volumes = self.executor.get_volume_parents(volume_id, peer_id)
+            target = self.executor.get_volume_parents(volume_id=volume_id,
+                                                      peer_id=peer_id,
+                                                      host=host)
         except exception.NotFound as e:
             msg = _("this volume is not found in tracker.")
             raise HTTPNotFound(explanation=msg,
@@ -199,7 +211,7 @@ class Controller(object):
         except exception.InvalidParameterValue:
             raise HTTPBadRequest()
 
-        return volumes
+        return target
 
 
 def create_resource():
