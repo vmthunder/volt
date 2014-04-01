@@ -18,8 +18,6 @@
 """ A native implements of binary tree to track the topology of peers
     (nova-compute nodes)
 """
-
-
 from collections import deque
 
 from volt.common import utils
@@ -75,7 +73,8 @@ class BTreeNode(object):
     def available(self):
         """ Return true if the node can append a child
         """
-        return not self.left or not self.right
+        return self.status == 'OK' and \
+               (not self.left or not self.right)
 
     def identity(self):
         """ Make BTreeNode callable to return to client.
@@ -96,9 +95,10 @@ class BTree(object):
 
         if root is None:
             root = BTreeNode(peer_id=None, host=utils.generate_uuid(),
-                             port=utils.generate_uuid(), 
+                             port=utils.generate_uuid(),
                              iqn=utils.generate_uuid(),
-                             lun=utils.generate_uuid())
+                             lun=utils.generate_uuid(),
+                             status='OK')
         root.left = None
         root.right = None
         root.parent = None
@@ -243,6 +243,8 @@ class BTree(object):
             peer_id = utils.generate_uuid()
 
         if peer_id not in self.nodes:
+            LOG.debug(_("cant found is %(peer_id)s, %(type)s"),
+                      {'peer_id': peer_id, 'type': type(peer_id)})
             target = BTreeNode(peer_id=peer_id, host=host,
                                  port=port, iqn=iqn, lun=lun,
                                  status=status)
@@ -365,7 +367,9 @@ class BtreeExecutor(executor.Executor):
             target = self.volumes[volume_id].nodes[peer_id]
 
         else:
-            peer_id = utils.generate_uuid(),
+            peer_id = utils.generate_uuid()
+            LOG.debug(_("new peer_id is %(peer_id)s, %(type)s"),
+                      {'peer_id': peer_id, 'type': type(peer_id)})
             new_node = BTreeNode(peer_id=peer_id,
                                  host=host,
                                  status='pending')

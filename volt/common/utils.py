@@ -173,5 +173,6 @@ def is_uuid_like(val):
     except (TypeError, ValueError, AttributeError):
         return False
 
+
 def generate_uuid():
     return binascii.hexlify(os.urandom(16))
