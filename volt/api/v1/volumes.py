@@ -210,6 +210,8 @@ class Controller(object):
                                content_type="text/plain")
         except exception.InvalidParameterValue:
             raise HTTPBadRequest()
+        except exception.Duplicate:
+            raise HTTPConflict()
 
         return target
 

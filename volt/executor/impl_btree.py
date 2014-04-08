@@ -55,7 +55,7 @@ class BTreeNode(object):
     def __init__(self, peer_id=None, host=None,
                  port=None, iqn=None, lun=None,
                  left=None, right=None, parent=None,
-                 status=None):
+                 status=None, fake_root=False):
 
         if not peer_id:
             peer_id = utils.generate_uuid()
@@ -69,6 +69,7 @@ class BTreeNode(object):
         self.right = right
         self.parent = parent
         self.status = status
+        self.fake_root = fake_root
 
     def available(self):
         """ Return true if the node can append a child
@@ -98,7 +99,7 @@ class BTree(object):
                              port=utils.generate_uuid(),
                              iqn=utils.generate_uuid(),
                              lun=utils.generate_uuid(),
-                             status='OK')
+                             status='OK', fake_root=True)
         root.left = None
         root.right = None
         root.parent = None
@@ -272,6 +273,7 @@ class BtreeExecutor(executor.Executor):
     """
     def __init__(self):
         self.volumes = {}
+        self.host_to_volumes = {}
 
     def get_volumes_list(self):
         volumes_list = []
@@ -338,6 +340,12 @@ class BtreeExecutor(executor.Executor):
         else:
             try:
                 vol_tree = self.volumes[volume_id]
+                node = vol_tree.nodes.get(peer_id, None)
+
+                if node is None:
+                    raise exception.InvalidParameterValue
+
+                self.remove_host_bookkeeping(host=node.host, peer_id=peer_id)
                 vol_tree.remove_by_peer_id(peer_id)
             except exception.InvalidParameterValue, e:
                 raise exception.NotFound
@@ -376,6 +384,10 @@ class BtreeExecutor(executor.Executor):
 
             self.volumes[volume_id].insert_by_node(new_node)
 
+            self.add_host_bookkeeping(host=host,
+                                     peer_id=peer_id,
+                                     node=new_node)
+
             target = self.volumes[volume_id].nodes[peer_id]
 
         if target.parent == self.volumes[volume_id].root:
@@ -390,3 +402,45 @@ class BtreeExecutor(executor.Executor):
                     'peer_id': peer_id,
                     'parents': [target.parent.identity()]
                 }
+
+    def update_status(self, host=None):
+        if host not in self.host_to_volumes:
+            return []
+
+        volume_list = self.host_to_volumes[host]
+        volume_info = []
+        for (peer_id, volume) in volume_list.iteritems():
+
+            if volume.parent.fake_root:
+                parents_list = []
+            else:
+                parents_list = [volume.parent.identity()]
+
+            volume_info.append({
+                'peer_id': peer_id,
+                'parents': parents_list
+            })
+
+        return volume_info
+
+
+    def add_host_bookkeeping(self, host=None, peer_id=None, node=None):
+
+        volumes_list = self.host_to_volumes.get(host, None)
+        if volumes_list is None:
+            volumes_list = {}
+            self.host_to_volumes[host] = volumes_list
+
+        if peer_id in volumes_list:
+            raise exception.Duplicate
+
+        volumes_list[peer_id] = node
+
+    def remove_host_bookkeeping(self, host=None, peer_id=None):
+
+        volumes_list = self.host_to_volumes.get(host, None)
+
+        if volumes_list is None or peer_id not in volumes_list:
+            raise exception.NotFound
+
+        del volumes_list[peer_id]

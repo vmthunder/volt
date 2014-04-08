@@ -14,12 +14,14 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import eventlet
 from webob.exc import HTTPNotFound
 from webob.exc import HTTPForbidden
 
 from volt.common import policy
 from volt.common import exception
 from volt.common import wsgi
+from volt import executor
 from volt.openstack.common import log as logging
 from volt.openstack.common.gettextutils import _
 
@@ -30,6 +32,8 @@ class Controller(object):
 
     def __init__(self):
         self.policy = policy.Enforcer()
+        self.pool = eventlet.GreenPool(size=1024)
+        self.executor = executor.get_default_executor()
 
     def _enforce(self, req, action):
         """Authorize an action against our policies"""
@@ -45,15 +49,18 @@ class Controller(object):
         :param req: the Request object coming from the wsgi layer
 
         """
-        self._enforce(req, 'heartbeat')
+        #self._enforce(req, 'heartbeat')
+        host = req.environ['REMOTE_ADDR']
+
+        LOG.debug(_("host_ip = %(host)s."), {'host': host})
 
         try:
-            result = self.executor.update_status(req.context)
+            result = self.executor.update_status(host=host)
         except exception.NotFound:
-            msg = _("Image with identifier %s not found") % image_id
+            msg = _("Host %s not found") % host
             LOG.debug(msg)
             raise HTTPNotFound(msg)
-        return status
+        return result
 
 
 def create_resource():

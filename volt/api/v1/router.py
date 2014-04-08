@@ -56,6 +56,6 @@ class API(wsgi.Router):
         mapper.connect("/members/heartbeat",
                        controller=members_resource,
                        action="heartbeat",
-                       conditions={'method': ['GET']})
+                       conditions={'method': ['PUT']})
 
         super(API, self).__init__(mapper)
