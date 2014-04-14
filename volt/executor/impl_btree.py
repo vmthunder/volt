@@ -89,6 +89,15 @@ class BTreeNode(object):
             "peer_id": self.peer_id
         }
 
+    def get_sibling(self):
+        if self.parent is None:
+            return None
+
+        if self.parent.left == self:
+            return self.parent.right
+
+        return self.parent.left
+
 
 class BTree(object):
 
@@ -350,9 +359,7 @@ class BtreeExecutor(executor.Executor):
             except exception.InvalidParameterValue, e:
                 raise exception.NotFound
 
-    def get_volume_parents(self, volume_id, peer_id=None, host=None):
-        """
-        """
+    def insert_node_slot(self, volume_id, peer_id=None, host=None):
         if peer_id is None and host is None:
             extra_msg = _('peer_id or host should not be None.')
             raise exception.InvalidParameterValue(value=peer_id,
@@ -390,18 +397,28 @@ class BtreeExecutor(executor.Executor):
 
             target = self.volumes[volume_id].nodes[peer_id]
 
-        if target.parent == self.volumes[volume_id].root:
-            return \
-                {
-                    'peer_id': peer_id,
-                    'parents': []
-                }
+        return target
+
+    def get_volume_parents(self, volume_id, peer_id=None, host=None):
+        """
+        """
+        target = self.insert_node_slot(volume_id,
+                                       peer_id=peer_id,
+                                       host=host)
+
+        parents_list = self.get_parents_info(target)
+
+        return \
+            {
+                'peer_id': peer_id,
+                'parents': parents_list
+            }
+
+    def get_parents_info(self, target):
+        if target.parent.fake_root:
+            return []
         else:
-            return \
-                {
-                    'peer_id': peer_id,
-                    'parents': [target.parent.identity()]
-                }
+            return [target.parent.identity()]
 
     def update_status(self, host=None):
         if host not in self.host_to_volumes:
@@ -411,10 +428,7 @@ class BtreeExecutor(executor.Executor):
         volume_info = []
         for (peer_id, volume) in volume_list.iteritems():
 
-            if volume.parent.fake_root:
-                parents_list = []
-            else:
-                parents_list = [volume.parent.identity()]
+            parents_list = self.get_parents_info()
 
             volume_info.append({
                 'peer_id': peer_id,
@@ -444,3 +458,21 @@ class BtreeExecutor(executor.Executor):
             raise exception.NotFound
 
         del volumes_list[peer_id]
+
+
+class BtreeWithUncleExecutor(BtreeExecutor):
+    """
+    """
+
+    def get_parents_info(self, target):
+        if target.parent.fake_root:
+            return []
+        else:
+            parent = target.parent
+            parents_list = [parent.identity()]
+            sibling = parent.get_sibling()
+            if sibling is not None:
+                parents_list.append(sibling.identity())
+
+            return parents_list
+        
