@@ -475,4 +475,3 @@ class BtreeWithUncleExecutor(BtreeExecutor):
                 parents_list.append(sibling.identity())
 
             return parents_list
-        
