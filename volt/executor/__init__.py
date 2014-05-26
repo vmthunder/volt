@@ -24,7 +24,7 @@ from volt.openstack.common.gettextutils import _
 EXECUTOR_NAMESPACE = 'volt.executor'
 
 executor_opts = [
-    cfg.StrOpt('default_executor', default='btree',
+    cfg.StrOpt('default_executor', default='btreewithuncle',
                help=_('The default volume tracker algorithm executor.')
     ),
 ]
