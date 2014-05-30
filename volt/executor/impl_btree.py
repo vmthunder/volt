@@ -40,7 +40,9 @@ def tree_find_available_slot(tree_root):
     slot = None
     while len(node_queue):
         node = node_queue.popleft()
-        if node.available():
+        if node is None:
+            continue
+        if node_available(node):
             slot = node
             break
         else:
@@ -48,6 +50,16 @@ def tree_find_available_slot(tree_root):
             node_queue.append(node.right)
 
     return slot
+
+
+def node_available(node):
+    """ Return true if the node can append a child
+    """
+    if node is None:
+        return False
+
+    return node.status == 'OK' and \
+           (not node.left or not node.right)
 
 
 class BTreeNode(object):
@@ -70,12 +82,6 @@ class BTreeNode(object):
         self.parent = parent
         self.status = status
         self.fake_root = fake_root
-
-    def available(self):
-        """ Return true if the node can append a child
-        """
-        return self.status == 'OK' and \
-               (not self.left or not self.right)
 
     def identity(self):
         """ Make BTreeNode callable to return to client.
@@ -138,6 +144,12 @@ class BTree(object):
                                                   extra_msg=extra_msg)
 
         slot = tree_find_available_slot(self.root)
+        if slot is None:
+            extra_msg = _('no available slot for newly volume.')
+            raise exception.InvalidParameterValue(value=new_node.peer_id,
+                                                  param='new_node',
+                                                  extra_msg=extra_msg)
+
         self.nodes[new_node.peer_id] = new_node
         new_node.left = None
         new_node.right = None
@@ -174,7 +186,7 @@ class BTree(object):
             up = target.left
             current = target
             # Always terminated in finite loop
-            while not current.available():
+            while not node_available(current):
                 if current.left:
                     current = current.left
 
@@ -410,7 +422,7 @@ class BtreeExecutor(executor.Executor):
 
         return \
             {
-                'peer_id': peer_id,
+                'peer_id': target.peer_id,
                 'parents': parents_list
             }
 
@@ -428,7 +440,7 @@ class BtreeExecutor(executor.Executor):
         volume_info = []
         for (peer_id, volume) in volume_list.iteritems():
 
-            parents_list = self.get_parents_info()
+            parents_list = self.get_parents_info(volume)
 
             volume_info.append({
                 'peer_id': peer_id,

@@ -80,7 +80,7 @@ class Controller(object):
         """
         params = {}
         for PARAM in SUPPORTED_PARAMS:
-            if PARAM in req:
+            if req and PARAM in req:
                 params[PARAM] = req.get(PARAM)
 
         return params
@@ -112,7 +112,7 @@ class Controller(object):
 
         return volumes
 
-    def remove(self, req, volume_id, peer_id, body={}):
+    def remove(self, req, volume_id, peer_id=None, body=None):
         """
         Remove the volume metadata from Volt
 
@@ -125,6 +125,7 @@ class Controller(object):
         """
         #self._enforce(req, 'remove_volume')
         params = self._get_query_params(body)
+        assert(peer_id is not None)
         try:
             self.executor.delete_volume_metadata(volume_id, peer_id, **params)
         except exception.NotFound as e:
@@ -178,7 +179,7 @@ class Controller(object):
 
         return volume_meta
 
-    def query(self, req, volume_id, body={}):
+    def query(self, req, volume_id, body=None):
         """
         Returns detailed information for all available volumes with id
         <volume_id>
@@ -197,7 +198,8 @@ class Controller(object):
         """
         #self._enforce(req, 'get_volumes')
         params = self._get_query_params(body)
-        host = params.get('host', None)
+        #host = params.get('host', None)
+        host = req.environ['REMOTE_ADDR']
         peer_id = params.get('peer_id', None)
         try:
             target = self.executor.get_volume_parents(volume_id=volume_id,
