@@ -36,6 +36,7 @@ SUPPORTED_PARAMS = ('host', 'port', 'iqn', 'lun', 'peer_id')
 LOG = logging.getLogger(__name__)
 
 
+
 class Controller(object):
     """
     WSGI controller for tracked volumes information in Volt v1 API
@@ -63,7 +64,10 @@ class Controller(object):
         self.policy = policy.Enforcer()
         self.pool = eventlet.GreenPool(size=1024)
         self.executor = executor.get_default_executor()
-
+#         self.pool.spawn_n(self.executor.kickoff_dead_node())
+        self.scanning_thread = executor.ScanningThread(self.executor)
+        
+        
     def _enforce(self, req, action):
         """Authorize an action against our policies"""
         try:
@@ -152,6 +156,9 @@ class Controller(object):
         """
         #self._enforce(req, 'register_volume')
         params = self._get_query_params(body)
+        #if self.scanning_thread.status == 'init':
+        #    self.scanning_thread.start()
+        #    self.scanning_thread.status = 'running'
         try:
             volume_meta = self.executor.add_volume_metadata(volume_id,
                                                             peer_id, **params)
@@ -201,6 +208,9 @@ class Controller(object):
         #host = params.get('host', None)
         host = req.environ['REMOTE_ADDR']
         peer_id = params.get('peer_id', None)
+        if self.scanning_thread.status == 'init':
+            self.scanning_thread.start()
+            self.scanning_thread.status = 'running'
         try:
             target = self.executor.get_volume_parents(volume_id=volume_id,
                                                       peer_id=peer_id,

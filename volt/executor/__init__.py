@@ -18,6 +18,8 @@
 
 from oslo.config import cfg
 from stevedore import driver
+import threading
+import time,sys
 
 from volt.openstack.common.gettextutils import _
 
@@ -34,6 +36,7 @@ CONF.register_opts(executor_opts)
 
 EXECUTOR = None
 
+MAX_POLLING_TIME = 30
 
 def get_default_executor():
     global EXECUTOR
@@ -69,3 +72,19 @@ class Executor(object):
 
     def update_status(self, host):
         raise NotImplementedError()
+    
+    def kickoff_dead_node(self):
+        raise NotImplementedError()
+    
+class ScanningThread(threading.Thread):
+    '''
+        timely scannning host info and kickoff dead nodes
+    '''
+    def __init__(self, excecutor):
+        self.executor = excecutor
+        self.status = 'init'
+        threading.Thread.__init__(self)
+        
+    def run(self):
+        self.executor.kickoff_dead_node()
+        
