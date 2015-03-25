@@ -19,7 +19,8 @@
 from oslo.config import cfg
 from stevedore import driver
 import threading
-import time,sys
+import time
+import sys
 
 from volt.openstack.common.gettextutils import _
 
@@ -28,7 +29,7 @@ EXECUTOR_NAMESPACE = 'volt.executor'
 executor_opts = [
     cfg.StrOpt('default_executor', default='btree',
                help=_('The default volume tracker algorithm executor.')
-    ),
+               ),
 ]
 
 CONF = cfg.CONF
@@ -37,6 +38,9 @@ CONF.register_opts(executor_opts)
 EXECUTOR = None
 
 MAX_POLLING_TIME = 30
+
+MAX_PARENT_NUM = 1
+
 
 def get_default_executor():
     global EXECUTOR
@@ -75,11 +79,11 @@ class Executor(object):
     
     def kickoff_dead_node(self):
         raise NotImplementedError()
-    
+
+
 class ScanningThread(threading.Thread):
-    '''
-        timely scannning host info and kickoff dead nodes
-    '''
+    """ timely scannning host info and kickoff dead nodes
+    """
     def __init__(self, excecutor):
         self.executor = excecutor
         self.status = 'init'
@@ -87,4 +91,3 @@ class ScanningThread(threading.Thread):
         
     def run(self):
         self.executor.kickoff_dead_node()
-        

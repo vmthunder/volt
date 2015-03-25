@@ -36,8 +36,12 @@ from volt.openstack.common import log as logging
 
 CONF = cfg.CONF
 
+
 def main():
-    CONF(sys.argv[1:], project='volt',
+    conf_file = ["--config-file=/etc/volt/volt.conf"]
+    if len(sys.argv) > 1:
+        conf_file = sys.argv[1:]
+    CONF(conf_file, project='volt',
          version=version.version_string())
     logging.setup('volt')
 

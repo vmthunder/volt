@@ -18,6 +18,11 @@
 """ A native implements of binary tree to track the topology of peers
     (nova-compute nodes)
 """
+import time
+import datetime
+import threading
+import random
+
 from collections import deque
 
 from volt.common import utils
@@ -26,7 +31,6 @@ from volt import executor
 from volt.openstack.common.gettextutils import _
 from volt.openstack.common import log as logging
 
-import time, datetime, threading
 
 LOG = logging.getLogger(__name__)
 
@@ -40,25 +44,28 @@ def tree_find_available_slot(tree_root):
     node_queue.append(tree_root)
 
     slot = None
-    LOG.debug(_("len(node_queue)"),{'length': len(node_queue)})
-    
-    while len(node_queue):        
+    LOG.debug(_("len(node_queue)"), {'length': len(node_queue)})
+
+    while len(node_queue):
         node = node_queue.popleft()
         LOG.debug(_("node is None %(node)s, length %(length)s"),
-                      {'node': node is None, 'length': len(node_queue)})
+                  {'node': node is None, 'length': len(node_queue)})
         if node is None:
             continue
         else:
-            LOG.debug(_("node's peer_id %(peer_id)s, status: %(status)s, host: %(host)s, tgt:%(iqn)s"),
-                      {'peer_id':node.peer_id, 'status':node.status, 'host':node.host, 'iqn':node.iqn})
+            LOG.debug(_("node's peer_id %(peer_id)s, status: "
+                        "%(status)s, host: %(host)s, tgt:%(iqn)s"),
+                      {'peer_id': node.peer_id, 'status': node.status,
+                       'host': node.host, 'iqn': node.iqn})
         if node_available(node):
             slot = node
             break
         else:
             node_queue.append(node.left)
             node_queue.append(node.right)
-    
+
     return slot
+
 
 def update_tree_status(tree_root):
     """update the level of each tree node
@@ -66,23 +73,25 @@ def update_tree_status(tree_root):
     node_queue = deque()
     node_queue.append(tree_root)
 
-    LOG.debug(_("len(node_queue)"),{'length': len(node_queue)})
-    
-    while len(node_queue) :
+    LOG.debug(_("len(node_queue)"), {'length': len(node_queue)})
+
+    while len(node_queue):
         node = node_queue.popleft()
         LOG.debug(_("node is None %(node)s, length %(length)s"),
-                      {'node': node is None, 'length': len(node_queue)})
+                  {'node': node is None, 'length': len(node_queue)})
         if node is None:
             continue
         else:
-            if node.parent :
+            if node.parent:
                 node.level = node.parent.level + 1
             else:
                 node.level = 0
-                
-            LOG.debug(_("node's peer_id %(peer_id)s, status: %(status)s, host: %(host)s, level:%(level)s"),
-                      {'peer_id':node.peer_id, 'status':node.status, 'host':node.host, 'level':node.level})
-        
+
+            LOG.debug(_("node's peer_id %(peer_id)s, status: "
+                        "%(status)s, host: %(host)s, level:%(level)s"),
+                      {'peer_id': node.peer_id, 'status': node.status,
+                       'host': node.host, 'level': node.level})
+
             node_queue.append(node.left)
             node_queue.append(node.right)
 
@@ -93,8 +102,7 @@ def node_available(node):
     if node is None:
         return False
 
-    return node.status == 'OK' and \
-           (not node.left or not node.right)
+    return node.status == 'OK' and (not node.left or not node.right)
 
 
 class BTreeNode(object):
@@ -103,7 +111,7 @@ class BTreeNode(object):
                  port=None, iqn=None, lun=None,
                  left=None, right=None, parent=None,
                  status=None, image_id=None, fake_root=False):
-        
+
         self.host = host
         self.port = port
         self.iqn = iqn
@@ -115,16 +123,18 @@ class BTreeNode(object):
         self.fake_root = fake_root
         self.level = -1
         if not peer_id:
-            peer_id = utils.generate_uuid(by_time=False, host=host, image_id=image_id)
+            peer_id = utils.generate_uuid(by_time=False, host=host,
+                                          image_id=image_id)
             self.level = 0
         self.peer_id = peer_id
+        self.parents_list = None
 
     def identity(self):
         """ Make BTreeNode callable to return to client.
         """
         return {
-            "host" : self.host,
-            "port" : self.port,
+            "host": self.host,
+            "port": self.port,
             "iqn": self.iqn,
             "lun": self.lun,
             'status': self.status,
@@ -146,7 +156,8 @@ class BTree(object):
     def __init__(self, volume_id, root=None):
 
         if root is None:
-            root = BTreeNode(peer_id=utils.generate_uuid(), host=utils.generate_uuid(),
+            root = BTreeNode(peer_id=utils.generate_uuid(),
+                             host=utils.generate_uuid(),
                              port=utils.generate_uuid(),
                              iqn=utils.generate_uuid(),
                              lun=utils.generate_uuid(),
@@ -247,7 +258,7 @@ class BTree(object):
                 target.parent.right = up
         if target == self.root:
             self.root = up
-        
+
         # update the level info
         update_tree_status(self.root)
         return target
@@ -284,6 +295,12 @@ class BTree(object):
     def count(self):
         return len(self.nodes)
 
+    def get_nodelist_identity(self, node_list=[]):
+        nodelist_identity = []
+        for node in node_list:
+            nodelist_identity.append(node.identity())
+        return nodelist_identity
+
     def get_node_parents(self, node):
         """ Get the parents of a node
 
@@ -295,21 +312,49 @@ class BTree(object):
                                                   param='node',
                                                   extra_msg=extra_msg)
 
-        parent_level = node.level - 1 
+        parent_level = node.level - 1
         parents_list = []
-        parents_list.append(node.parent.identity())
-        
+
+        # if parents_list exists, check wheather parents still in the tree
+        if node.parents_list:
+            if node.parent in node.parents_list and node.parent is \
+               not node.parents_list[0]:
+                node.parents_list.remove(node.parent)
+            if node.parent is not node.parents_list[0]:
+                node.parents_list[0] = node.parent
+
+        #The first time to get_node_parents
+        else:
+            node.parents_list = []
+            node.parents_list.append(node.parent)
+
         for parent_node in self.nodes.values():
-            if parent_node.level == parent_level and node is not node.parent:
-                parents_list.append(parent_node.identity())
-                
-        return parents_list
+                if parent_node.level == parent_level and parent_node is\
+                   not node.parent and parent_node.status == "OK":
+                    parents_list.append(parent_node)
+
+        for parent_node in node.parents_list:
+            if parent_node is not node.parent and parent_node not in \
+               parents_list:
+                node.parents_list.remove(parent_node)
+
+        add_list = []
+        if executor.MAX_PARENT_NUM - len(node.parents_list) < len(parents_list):
+            add_list = random.sample(parents_list, executor.MAX_PARENT_NUM -
+                                     len(node.parents_list))
+        else:
+            add_list = parents_list
+        node.parents_list.extend(add_list)
+
+        del parents_list
+
+        return self.get_nodelist_identity(node.parents_list)
 
     def update_nodes(self, peer_id=None, host=None,
                      port=None, iqn=None, lun=None,
                      status=None):
-        if peer_id is None:  
-#             if peer_id is None, cann't be updated                        
+        if peer_id is None:
+#             if peer_id is None, cann't be updated
 #             peer_id = utils.generate_uuid(host, port, iqn, lun, False)
             return None
 
@@ -317,8 +362,8 @@ class BTree(object):
             LOG.debug(_("cant found is %(peer_id)s, %(type)s"),
                       {'peer_id': peer_id, 'type': type(peer_id)})
             target = BTreeNode(peer_id=peer_id, host=host,
-                                 port=port, iqn=iqn, lun=lun,
-                                 status=status)
+                               port=port, iqn=iqn, lun=lun,
+                               status=status)
             self.insert_by_node(target)
         else:
             target = self.nodes[peer_id]
@@ -387,10 +432,10 @@ class BtreeExecutor(executor.Executor):
 
         if volume_id not in self.volumes:
             raise exception.NotFound
-        
+
         if peer_id is None:
             peer_id = utils.generate_uuid(False, host, volume_id)
-            
+
         target = self.volumes[volume_id].update_nodes(peer_id=peer_id,
                                                       host=host,
                                                       port=port,
@@ -438,29 +483,30 @@ class BtreeExecutor(executor.Executor):
 
         if volume_id not in self.volumes:
             self.volumes[volume_id] = BTree(volume_id)
-        
+
         peer_id = utils.generate_uuid(False, host, volume_id)
-        
+
         if peer_id in self.volumes[volume_id].nodes:
             target = self.volumes[volume_id].nodes[peer_id]
 
-        else:            
+        else:
             LOG.debug(_("new peer_id is %(peer_id)s, %(type)s"),
                       {'peer_id': peer_id, 'type': type(peer_id)})
             new_node = BTreeNode(peer_id=peer_id,
                                  host=host,
                                  image_id=volume_id,
                                  status='pending')
-            
+
             try:
                 self.volumes[volume_id].insert_by_node(new_node)
-    
+
                 self.add_host_bookkeeping(host=host,
-                                         peer_id=peer_id,
-                                         node=new_node)
-    
+                                          peer_id=peer_id,
+                                          node=new_node)
+
                 target = self.volumes[volume_id].nodes[peer_id]
             except Exception as exc:
+                target = None
                 LOG.debug(_(" fatal error occured insert_node_slot: %s" % exc))
 
         return target
@@ -472,7 +518,14 @@ class BtreeExecutor(executor.Executor):
                                        peer_id=peer_id,
                                        host=host)
 
-        parents_list = self.get_parents_info(target)
+        if target:
+            parents_list = self.get_parents_info(target)
+        else:
+            return \
+                {
+                    'peer_id': None,
+                    'parents': [{'peer_id': None}]
+                }
 
         return \
             {
@@ -483,7 +536,7 @@ class BtreeExecutor(executor.Executor):
     def get_parents_info(self, target):
         if target.parent.fake_root:
             return []
-        else:                       
+        else:
             image_id = utils.get_image_id_from_peerid(target.peer_id)
             btree = self.volumes[image_id]
             parents_list = btree.get_node_parents(target)
@@ -497,7 +550,7 @@ class BtreeExecutor(executor.Executor):
         volume_list = self.host_to_volumes[host]['volume_list']
         self.host_to_volumes[host]['timestamp'] = datetime.datetime.now()
         volume_info = []
-        
+
         for (peer_id, volume) in volume_list.iteritems():
 
             parents_list = self.get_parents_info(volume)
@@ -508,7 +561,6 @@ class BtreeExecutor(executor.Executor):
             })
 
         return volume_info
-
 
     def add_host_bookkeeping(self, host=None, peer_id=None, node=None):
 
@@ -522,7 +574,7 @@ class BtreeExecutor(executor.Executor):
             self.host_to_volumes[host] = host_info
         else:
             volumes_list = host_info['volume_list']
-            
+
         if peer_id in volumes_list:
             raise exception.Duplicate
 
@@ -539,32 +591,36 @@ class BtreeExecutor(executor.Executor):
 
     #kickoff node that lost connction
     def kickoff_dead_node(self):
-        
+
         while True:
             now_time = datetime.datetime.now()
-            LOG.debug('scanning host_to_volumes list: %s host lists: %s' % 
+            LOG.debug('scanning host_to_volumes list: %s host lists: %s' %
                       (now_time, self.host_to_volumes.keys()))
-            for host in self.host_to_volumes.keys():            
+            for host in self.host_to_volumes.keys():
                 host_info = self.host_to_volumes[host]
-                last_save_time = host_info['timestamp']            
-                if (now_time - last_save_time).seconds > executor.MAX_POLLING_TIME:
+                last_save_time = host_info['timestamp']
+                if (now_time - last_save_time).seconds > \
+                   executor.MAX_POLLING_TIME:
                     #if time exceed MAX_POLLING_TIME, then kick out of the tree               
-                    volume_list = host_info['volume_list']   
-                    
+                    volume_list = host_info['volume_list']
+
                     for peer_id in volume_list.keys():
-                        LOG.debug('volume_list.keys(): %s',volume_list.keys())
+                        LOG.debug('volume_list.keys(): %s', volume_list.keys())
                         self.remove_host_bookkeeping(host, peer_id)
-                        vol_tree = self.volumes[utils.get_image_id_from_peerid(peer_id)]
+                        vol_tree = self.volumes[
+                            utils.get_image_id_from_peerid(peer_id)]
                         vol_tree.remove_by_peer_id(peer_id)
-                        LOG.debug(_('kick out host %(host)s, peer_id: %(peer_id)s elapse time: %(time)s'),{
-                                    'host':host, 'peer_id':peer_id, 'time':now_time - last_save_time})
+                        LOG.debug(_('kick out host %(host)s, peer_id: '
+                                    '%(peer_id)s elapse time: %(time)s'),
+                                  {'host': host, 'peer_id': peer_id,
+                                   'time': now_time - last_save_time})
                     del self.host_to_volumes[host]
-                
-            LOG.debug('scanning host_to_volumes list: %s host lists: %s' % 
+
+            LOG.debug('scanning host_to_volumes list: %s host lists: %s' %
                       (now_time, self.host_to_volumes.keys()))
             timeout = threading.Event()
             timeout.wait(executor.MAX_POLLING_TIME)
-        
+
 
 class BtreeWithUncleExecutor(BtreeExecutor):
     """

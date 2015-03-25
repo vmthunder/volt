@@ -36,7 +36,6 @@ SUPPORTED_PARAMS = ('host', 'port', 'iqn', 'lun', 'peer_id')
 LOG = logging.getLogger(__name__)
 
 
-
 class Controller(object):
     """
     WSGI controller for tracked volumes information in Volt v1 API
@@ -66,8 +65,7 @@ class Controller(object):
         self.executor = executor.get_default_executor()
 #         self.pool.spawn_n(self.executor.kickoff_dead_node())
         self.scanning_thread = executor.ScanningThread(self.executor)
-        
-        
+
     def _enforce(self, req, action):
         """Authorize an action against our policies"""
         try:

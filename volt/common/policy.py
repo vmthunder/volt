@@ -83,6 +83,7 @@ def check(rule, target, creds, exc=None, *args, **kwargs):
 
     return result
 
+
 # Really have to figure out a way to deprecate this
 def set_rules(rules):
     """Set the rules in use for policy checks."""
